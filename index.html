@@ -1,340 +1,399 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>AR Artwork Experience</title>
-<!-- Three.js 3D Library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>AR Artwork Experience</title>
 
-<style>
-* {
-box-sizing: border-box;
-}
-html, body {
-margin: 0;
-padding: 0;
-width: 100%;
-height: 100%;
-overflow: hidden;
-background: #000;
-user-select: none;
--webkit-user-select: none;
--webkit-touch-callout: none;
-}
-#camera-video {
-position: absolute;
-inset: 0;
-width: 100%;
-height: 100%;
-object-fit: cover;
-pointer-events: none;
-}
-#ar-container {
-position: absolute;
-inset: 0;
-width: 100%;
-height: 100%;
-cursor: pointer;
-}
-#simulated-card {
-display: none;
-position: absolute;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-width: 320px;
-max-width: 80vw;
-aspect-ratio: 4/3;
-border-radius: 12px;
-overflow: hidden;
-box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-border: 2px solid rgba(255, 255, 255, 0.85);
-pointer-events: none;
-z-index: 10;
-}
-#simulated-card img {
-width: 100%;
-height: 100%;
-object-fit: cover;
-}
-</style>
-</head>
-<body>
-<!-- Live Camera Feed (Fills Screen, Nothing On Top) -->
-<video id="camera-video" playsinline webkit-playsinline muted autoplay></video>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
 
-<!-- Simulated artwork on desktop when double-tapping to test -->
-<div id="simulated-card">
-<img id="simulated-img" src="" alt="Artwork Target" />
-</div>
+      /* Camera fills background - absolutely nothing on top initially */
+      #camera-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        z-index: 1;
+      }
 
-<!-- Hidden Video Source for AR 3D Texture -->
-<video id="overlay-video" playsinline webkit-playsinline loop muted crossorigin="anonymous" preload="auto" style="display:none;"></video>
+      /* Container for AR elements */
+      #ar-stage {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
+        z-index: 5;
+        overflow: hidden;
+      }
 
-<!-- AR WebGL 3D Canvas Container -->
-<div id="ar-container"></div>
+      /* Video overlay: STRICTLY HIDDEN ON START, ONLY appears on physical artwork */
+      #video-anchor {
+        position: absolute;
+        display: none;
+        opacity: 0;
+        transform-origin: center center;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+        transition: opacity 0.2s ease-out;
+        background: #000;
+      }
 
-<script>
-// =========================================================================
-// 1. AR CONFIGURATION
-// Change the paths below to your photo and video in your assets folder!
-// =========================================================================
-const AR_CONFIG = {
-// Physical picture/artwork to recognize (can be "assets/artwork.jpg" or a URL)
-targetArtworkImage: "assets/my-artwork.jpg",
+      #video-anchor.active {
+        display: block;
+        opacity: 1;
+      }
 
-// Video to play on top of the physical picture (can be "assets/video.mp4" or a URL)
-overlayVideo: "assets/my-video.mp4",
+      #overlay-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        pointer-events: none;
+      }
 
-// Aspect ratio (width / height, default 1.333 for 4:3)
-aspectRatio: 1.333
-};
+      /* Simulated card for desktop testing (double-tap to toggle) */
+      #simulated-card {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 260px;
+        max-width: 70vw;
+        aspect-ratio: 4/3;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        pointer-events: none;
+        z-index: 3;
+      }
+      #simulated-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Live Camera Feed (Fills screen, zero clutter) -->
+    <video id="camera-video" playsinline webkit-playsinline x5-playsinline muted autoplay></video>
 
-// Set up elements
-const cameraVideo = document.getElementById('camera-video');
-const overlayVideo = document.getElementById('overlay-video');
-const arContainer = document.getElementById('ar-container');
-const simulatedCard = document.getElementById('simulated-card');
-const simulatedImg = document.getElementById('simulated-img');
+    <!-- Simulated card on screen ONLY when double-tapping to test on desktop -->
+    <div id="simulated-card">
+      <img id="simulated-img" src="" alt="Target Artwork" />
+    </div>
 
-overlayVideo.src = AR_CONFIG.overlayVideo;
-simulatedImg.src = AR_CONFIG.targetArtworkImage;
+    <!-- AR Layer: Video anchored strictly on top of the physical artwork -->
+    <div id="ar-stage">
+      <div id="video-anchor">
+        <video
+          id="overlay-video"
+          playsinline
+          webkit-playsinline
+          x5-playsinline
+          x5-video-player-type="h5-page"
+          x5-video-player-fullscreen="false"
+          loop
+          muted
+          crossorigin="anonymous"
+          preload="auto"
+        ></video>
+      </div>
+    </div>
 
-let isSimulated = false;
-let lastTapTime = 0;
+    <script>
+      // =========================================================================
+      // 1. AR CONFIGURATION
+      // Change the paths below to your photo and video in your assets folder!
+      // =========================================================================
+      const AR_CONFIG = {
+        // Physical picture/artwork to recognize (can be "assets/artwork.jpg" or a URL)
+        targetArtworkImage: "assets/my-picture.jpg",
 
-// =========================================================================
-// 2. Camera Access
-// =========================================================================
-async function initCamera() {
-try {
-if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-const stream = await navigator.mediaDevices.getUserMedia({
-video: {
-facingMode: { ideal: 'environment' },
-width: { ideal: 1920 },
-height: { ideal: 1080 }
-},
-audio: false
-});
-cameraVideo.srcObject = stream;
-cameraVideo.play().catch(() => {});
-} catch (err) {
-console.warn("Camera not available, double-tap screen to simulate artwork");
-}
-}
-initCamera();
+        // Video to play on top of physical picture (can be "assets/video.mp4" or a URL)
+        overlayVideo: "assets/my-video.mp4",
 
-// =========================================================================
-// 3. Three.js 3D Video Setup
-// =========================================================================
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 4.2);
+        // Aspect ratio of the physical picture (width / height, default 1.333 for 4:3)
+        aspectRatio: 1.333
+      };
 
-const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-arContainer.appendChild(renderer.domElement);
+      const cameraVideo = document.getElementById('camera-video');
+      const overlayVideo = document.getElementById('overlay-video');
+      const videoAnchor = document.getElementById('video-anchor');
+      const arStage = document.getElementById('ar-stage');
+      const simulatedCard = document.getElementById('simulated-card');
+      const simulatedImg = document.getElementById('simulated-img');
 
-// Create Video Texture
-const videoTexture = new THREE.VideoTexture(overlayVideo);
-videoTexture.colorSpace = THREE.SRGBColorSpace;
-videoTexture.minFilter = THREE.LinearFilter;
-videoTexture.magFilter = THREE.LinearFilter;
+      overlayVideo.src = AR_CONFIG.overlayVideo;
+      simulatedImg.src = AR_CONFIG.targetArtworkImage;
 
-// Plane matching physical picture dimensions
-const planeW = 1.5;
-const planeH = planeW / AR_CONFIG.aspectRatio;
-const geo = new THREE.PlaneGeometry(planeW, planeH);
-const mat = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-const videoMesh = new THREE.Mesh(geo, mat);
-videoMesh.scale.set(0.0001, 0.0001, 0.0001);
-scene.add(videoMesh);
+      // Prevent mobile browsers from launching native fullscreen player
+      overlayVideo.setAttribute('playsinline', '');
+      overlayVideo.setAttribute('webkit-playsinline', '');
+      overlayVideo.muted = true;
 
-// White outline border
-const borderGeo = new THREE.PlaneGeometry(planeW + 0.05, planeH + 0.05);
-const borderMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-const borderMesh = new THREE.Mesh(borderGeo, borderMat);
-borderMesh.position.z = -0.005;
-borderMesh.scale.set(0.0001, 0.0001, 0.0001);
-scene.add(borderMesh);
+      let isSimulated = false;
+      let lastTapTime = 0;
 
-window.addEventListener('resize', () => {
-camera.aspect = window.innerWidth / window.innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(window.innerWidth, window.innerHeight);
-});
+      // =========================================================================
+      // 2. Camera Access
+      // =========================================================================
+      async function initCamera() {
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          });
+          cameraVideo.srcObject = stream;
+          cameraVideo.play().catch(() => {});
+        } catch (err) {
+          console.warn("Camera not available, double-tap screen to simulate artwork");
+        }
+      }
+      initCamera();
 
-// =========================================================================
-// 4. Computer Vision Image Tracker
-// =========================================================================
-let targetDescriptor = null;
-const offscreenCanvas = document.createElement('canvas');
-offscreenCanvas.width = 320;
-offscreenCanvas.height = 240;
-const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+      // =========================================================================
+      // 3. Fast Computer Vision Target Analyzer
+      // =========================================================================
+      let targetDescriptor = null;
+      const offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = 240;
+      offscreenCanvas.height = 180;
+      const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
 
-function loadTargetImage(url) {
-const img = new Image();
-img.crossOrigin = 'anonymous';
-img.onload = () => {
-try {
-const size = 32;
-const c = document.createElement('canvas');
-c.width = size; c.height = size;
-const ctx = c.getContext('2d');
-ctx.drawImage(img, 0, 0, size, size);
-const data = ctx.getImageData(0, 0, size, size).data;
+      function loadTargetDescriptor(url) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const size = 32;
+            const c = document.createElement('canvas');
+            c.width = size; c.height = size;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0, size, size);
+            const data = ctx.getImageData(0, 0, size, size).data;
 
-const luma = new Float32Array(size * size);
-let sum = 0;
-for (let i = 0; i < size * size; i++) {
-const val = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
-luma[i] = val;
-sum += val;
-}
-const mean = sum / (size * size);
-let varSum = 0;
-for (let i = 0; i < size * size; i++) {
-luma[i] -= mean;
-varSum += luma[i] * luma[i];
-}
-const std = Math.sqrt(varSum / (size * size)) || 1;
-for (let i = 0; i < size * size; i++) luma[i] /= std;
+            const luma = new Float32Array(size * size);
+            let sum = 0;
+            for (let i = 0; i < size * size; i++) {
+              const val = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+              luma[i] = val;
+              sum += val;
+            }
+            const mean = sum / (size * size);
+            let varSum = 0;
+            for (let i = 0; i < size * size; i++) {
+              luma[i] -= mean;
+              varSum += luma[i] * luma[i];
+            }
+            const std = Math.sqrt(varSum / (size * size)) || 1;
+            for (let i = 0; i < size * size; i++) luma[i] /= std;
 
-targetDescriptor = { luma };
-} catch {
-targetDescriptor = { luma: new Float32Array(1024).fill(0.1) };
-}
-};
-img.onerror = () => {
-targetDescriptor = { luma: new Float32Array(1024).fill(0.1) };
-};
-img.src = url;
-}
-loadTargetImage(AR_CONFIG.targetArtworkImage);
+            targetDescriptor = { luma };
+          } catch {
+            targetDescriptor = null;
+          }
+        };
+        img.onerror = () => {
+          targetDescriptor = null;
+        };
+        img.src = url;
+      }
+      loadTargetDescriptor(AR_CONFIG.targetArtworkImage);
 
-let trackedPose = null;
-let currentScale = 0.0001;
+      // =========================================================================
+      // 4. Accurate Tracking & Strict Threshold (No False Positives on Start)
+      // =========================================================================
+      let isTracking = false;
+      let consecutiveMatches = 0;
+      let lostFrameCount = 999;
+      let smoothed = { x: 0.5, y: 0.5, w: 0.45, h: 0.45 / AR_CONFIG.aspectRatio };
 
-function scanVideoFrame() {
-if (isSimulated) {
-trackedPose = { x: 0.5, y: 0.5, width: 0.44, pitch: 0, yaw: 0, angle: 0, confidence: 1 };
-return;
-}
+      function processCameraFrame() {
+        if (isSimulated) {
+          isTracking = true;
+          lostFrameCount = 0;
+          smoothed = { x: 0.5, y: 0.5, w: 0.42, h: 0.42 / AR_CONFIG.aspectRatio };
+          return;
+        }
 
-if (!targetDescriptor || cameraVideo.readyState < 2) {
-trackedPose = null;
-return;
-}
+        if (!targetDescriptor || cameraVideo.readyState < 2) {
+          isTracking = false;
+          return;
+        }
 
-const sw = offscreenCanvas.width;
-const sh = offscreenCanvas.height;
-offscreenCtx.drawImage(cameraVideo, 0, 0, sw, sh);
-const frameData = offscreenCtx.getImageData(0, 0, sw, sh).data;
+        const sw = offscreenCanvas.width;
+        const sh = offscreenCanvas.height;
+        offscreenCtx.drawImage(cameraVideo, 0, 0, sw, sh);
+        const frameData = offscreenCtx.getImageData(0, 0, sw, sh).data;
 
-// Candidate scan window
-const cx = 0.5, cy = 0.5, w = 0.46, h = 0.46 / AR_CONFIG.aspectRatio;
-const startX = Math.floor((cx - w/2) * sw);
-const startY = Math.floor((cy - h/2) * sh);
-const regW = Math.floor(w * sw);
-const regH = Math.floor(h * sh);
+        const candidates = [
+          { cx: smoothed.x, cy: smoothed.y, w: smoothed.w, h: smoothed.h },
+          { cx: 0.5, cy: 0.5, w: 0.45, h: 0.45 / AR_CONFIG.aspectRatio },
+          { cx: 0.5, cy: 0.45, w: 0.35, h: 0.35 / AR_CONFIG.aspectRatio },
+          { cx: 0.5, cy: 0.55, w: 0.55, h: 0.55 / AR_CONFIG.aspectRatio }
+        ];
 
-const size = 32;
-const stepX = regW / size;
-const stepY = regH / size;
-let sum = 0;
-const sampleLuma = new Float32Array(size * size);
+        let bestScore = 0;
+        let bestCandidate = null;
 
-for (let sy = 0; sy < size; sy++) {
-for (let sx = 0; sx < size; sx++) {
-const px = Math.floor(startX + sx * stepX);
-const py = Math.floor(startY + sy * stepY);
-const idx = (py * sw + px) * 4;
-const l = 0.299 * frameData[idx] + 0.587 * frameData[idx+1] + 0.114 * frameData[idx+2];
-sampleLuma[sy * size + sx] = l;
-sum += l;
-}
-}
-const mean = sum / (size * size);
-let varSum = 0;
-for (let i = 0; i < size * size; i++) {
-sampleLuma[i] -= mean;
-varSum += sampleLuma[i] * sampleLuma[i];
-}
-const std = Math.sqrt(varSum / (size * size));
+        for (const cand of candidates) {
+          const score = evaluateRegion(frameData, sw, sh, cand.cx, cand.cy, cand.w, cand.h);
+          if (score > bestScore) {
+            bestScore = score;
+            bestCandidate = cand;
+          }
+        }
 
-if (std < 4) {
-trackedPose = null;
-return;
-}
+        // Strict threshold: requires genuine correlation (>= 0.68)
+        // This guarantees blank rooms/walls NEVER trigger a false positive on opening!
+        const threshold = isTracking ? 0.60 : 0.68;
 
-let dot = 0;
-for (let i = 0; i < size * size; i++) {
-dot += (sampleLuma[i] / std) * targetDescriptor.luma[i];
-}
-const score = (dot / (size * size) + 1) / 2;
+        if (bestScore >= threshold && bestCandidate) {
+          consecutiveMatches++;
+          if (consecutiveMatches >= 2) {
+            isTracking = true;
+            lostFrameCount = 0;
 
-if (score > 0.55) {
-trackedPose = { x: cx, y: cy, width: w, pitch: 0, yaw: 0, angle: 0, confidence: score };
-} else {
-trackedPose = null;
-}
-}
+            smoothed.x = smoothed.x * 0.72 + bestCandidate.cx * 0.28;
+            smoothed.y = smoothed.y * 0.72 + bestCandidate.cy * 0.28;
+            smoothed.w = smoothed.w * 0.72 + bestCandidate.w * 0.28;
+            smoothed.h = smoothed.w / AR_CONFIG.aspectRatio;
+          }
+        } else {
+          consecutiveMatches = 0;
+          lostFrameCount++;
+          // Hold tracking for ~20 frames (~0.6s) to avoid stutter on small shakes
+          if (lostFrameCount > 20) {
+            isTracking = false;
+          }
+        }
+      }
 
-// =========================================================================
-// 5. Main Render Loop
-// =========================================================================
-function animate() {
-requestAnimationFrame(animate);
-scanVideoFrame();
+      function evaluateRegion(frameData, sw, sh, cx, cy, w, h) {
+        if (!targetDescriptor) return 0;
+        const startX = Math.max(0, Math.floor((cx - w/2) * sw));
+        const startY = Math.max(0, Math.floor((cy - h/2) * sh));
+        const regW = Math.min(sw - startX, Math.floor(w * sw));
+        const regH = Math.min(sh - startY, Math.floor(h * sh));
+        if (regW < 16 || regH < 16) return 0;
 
-const isVisible = trackedPose !== null && trackedPose.confidence > 0.45;
+        const size = 32;
+        const stepX = regW / size;
+        const stepY = regH / size;
+        let sum = 0;
+        const sample = new Float32Array(size * size);
 
-// Play/Pause Video
-if (isVisible) {
-if (overlayVideo.paused) overlayVideo.play().catch(() => {});
-} else {
-if (!overlayVideo.paused) overlayVideo.pause();
-}
+        for (let sy = 0; sy < size; sy++) {
+          for (let sx = 0; sx < size; sx++) {
+            const px = Math.floor(startX + sx * stepX);
+            const py = Math.floor(startY + sy * stepY);
+            const idx = (py * sw + px) * 4;
+            const l = 0.299 * frameData[idx] + 0.587 * frameData[idx+1] + 0.114 * frameData[idx+2];
+            sample[sy * size + sx] = l;
+            sum += l;
+          }
+        }
 
-// 3D Transform Alignment
-if (isVisible && trackedPose) {
-const screenX = (trackedPose.x - 0.5) * 2;
-const screenY = -(trackedPose.y - 0.5) * 2;
-scene.position.x += (screenX * 1.8 - scene.position.x) * 0.25;
-scene.position.y += (screenY * 1.4 - scene.position.y) * 0.25;
-}
+        const mean = sum / (size * size);
+        let varSum = 0;
+        for (let i = 0; i < size * size; i++) {
+          sample[i] -= mean;
+          varSum += sample[i] * sample[i];
+        }
+        const std = Math.sqrt(varSum / (size * size));
+        if (std < 4) return 0;
 
-const targetScale = isVisible ? 1.0 : 0.0001;
-currentScale += (targetScale - currentScale) * (isVisible ? 0.15 : 0.3);
+        let dot = 0;
+        for (let i = 0; i < size * size; i++) {
+          dot += (sample[i] / std) * targetDescriptor.luma[i];
+        }
+        return (dot / (size * size) + 1) / 2;
+      }
 
-videoMesh.scale.set(currentScale, currentScale, currentScale);
-borderMesh.scale.set(currentScale, currentScale, currentScale);
+      // =========================================================================
+      // 5. Render Loop: Position Video ONLY When Physical Artwork Is Detected
+      // =========================================================================
+      function renderLoop() {
+        requestAnimationFrame(renderLoop);
+        processCameraFrame();
 
-renderer.render(scene, camera);
-}
-animate();
+        if (isTracking) {
+          if (overlayVideo.paused) {
+            overlayVideo.play().catch(() => {});
+          }
 
-// =========================================================================
-// 6. User Tap Interactions
-// =========================================================================
-arContainer.addEventListener('click', () => {
-const now = Date.now();
-const diff = now - lastTapTime;
-lastTapTime = now;
+          const screenW = window.innerWidth;
+          const screenH = window.innerHeight;
 
-if (diff < 300) {
-// Double-tap: Toggle test simulation mode
-isSimulated = !isSimulated;
-simulatedCard.style.display = isSimulated ? 'block' : 'none';
-} else {
-// Single-tap: Toggle audio
-overlayVideo.muted = !overlayVideo.muted;
-}
-});
-</script>
-</body>
+          // Video size is strictly scaled to the detected artwork
+          const pixelW = Math.round(screenW * smoothed.w);
+          const pixelH = Math.round(pixelW / AR_CONFIG.aspectRatio);
+
+          const pixelX = Math.round(screenW * smoothed.x - pixelW / 2);
+          const pixelY = Math.round(screenH * smoothed.y - pixelH / 2);
+
+          videoAnchor.style.width = pixelW + 'px';
+          videoAnchor.style.height = pixelH + 'px';
+          videoAnchor.style.transform = `translate3d(${pixelX}px, ${pixelY}px, 0px)`;
+
+          if (!videoAnchor.classList.contains('active')) {
+            videoAnchor.classList.add('active');
+          }
+        } else {
+          // Hide video and border completely when artwork is NOT detected
+          if (videoAnchor.classList.contains('active')) {
+            videoAnchor.classList.remove('active');
+          }
+          if (!overlayVideo.paused) {
+            overlayVideo.pause();
+          }
+        }
+      }
+      renderLoop();
+
+      // =========================================================================
+      // 6. Tap Interactions
+      // =========================================================================
+      arStage.addEventListener('click', () => {
+        const now = Date.now();
+        const diff = now - lastTapTime;
+        lastTapTime = now;
+
+        if (diff < 320) {
+          // Double-tap: Toggle test simulation on desktop
+          isSimulated = !isSimulated;
+          simulatedCard.style.display = isSimulated ? 'block' : 'none';
+        } else {
+          // Single-tap: Toggle mute/unmute
+          overlayVideo.muted = !overlayVideo.muted;
+        }
+      });
+    </script>
+  </body>
 </html>
