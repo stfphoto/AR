@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>AR Artwork Experience</title>
 
-    <!-- A-Frame & MindAR -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
     <style>
       * {
         box-sizing: border-box;
@@ -23,6 +19,11 @@
         user-select: none;
         -webkit-user-select: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      /* Force MindAR video stream to fill the screen properly */
+      video {
+        max-width: none !important;
       }
 
       /* Hide default A-Frame VR buttons and standard MindAR scanning screens */
@@ -55,8 +56,8 @@
       }
 
       .spinner-ring {
-        width: 64px;
-        height: 64px;
+        width: 60px;
+        height: 60px;
         border: 3px solid rgba(255, 255, 255, 0.1);
         border-top-color: #38bdf8;
         border-right-color: #2dd4bf;
@@ -71,22 +72,23 @@
       }
 
       .loader-title {
-        font-size: 17px;
+        font-size: 18px;
         font-weight: 600;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
+        letter-spacing: 0.3px;
+        margin-bottom: 8px;
       }
 
       .loader-sub {
         font-size: 13px;
         color: #94a3b8;
-        margin-bottom: 20px;
-        max-width: 300px;
+        margin-bottom: 18px;
+        max-width: 320px;
+        line-height: 1.5;
       }
 
       .loader-badge {
-        font-size: 11px;
-        font-family: monospace;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 999px;
@@ -94,20 +96,27 @@
         color: #38bdf8;
       }
 
-      .error-btn {
+      .action-btn {
         display: none;
         margin-top: 18px;
-        padding: 10px 20px;
+        padding: 12px 24px;
         background: #38bdf8;
         color: #0f172a;
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 600;
         border-radius: 999px;
         border: none;
         cursor: pointer;
+        box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+        transition: transform 0.15s, background 0.15s;
       }
 
-      /* Scanning Reticle */
+      .action-btn:active {
+        transform: scale(0.97);
+        background: #0ea5e9;
+      }
+
+      /* Active Scanning Viewfinder Reticle */
       #scanning-hud {
         position: fixed;
         inset: 0;
@@ -126,71 +135,211 @@
 
       .hud-frame {
         position: relative;
-        width: 260px;
-        height: 260px;
-        border: 2px dashed rgba(56, 189, 248, 0.4);
-        border-radius: 16px;
+        width: 270px;
+        height: 270px;
+        border: 2px dashed rgba(56, 189, 248, 0.5);
+        border-radius: 18px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        box-shadow: 0 0 30px rgba(56, 189, 248, 0.15);
       }
 
       .hud-text {
         font-size: 12px;
-        color: rgba(255, 255, 255, 0.85);
-        background: rgba(0, 0, 0, 0.6);
-        padding: 6px 14px;
+        color: rgba(255, 255, 255, 0.9);
+        background: rgba(15, 23, 42, 0.75);
+        padding: 8px 16px;
         border-radius: 999px;
-        margin-top: 16px;
-        backdrop-filter: blur(4px);
+        margin-top: 18px;
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        letter-spacing: 0.3px;
       }
 
       /* Audio Status Badge */
       #audio-badge {
         position: fixed;
-        bottom: 20px;
+        bottom: 24px;
         right: 20px;
         z-index: 1001;
-        background: rgba(0, 0, 0, 0.7);
+        background: rgba(15, 23, 42, 0.85);
         color: #fff;
         border: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 8px 14px;
+        padding: 10px 18px;
         border-radius: 999px;
-        font-size: 12px;
+        font-size: 13px;
+        font-weight: 500;
         backdrop-filter: blur(8px);
         cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+
+      /* Top Header Status */
+      #top-header {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1001;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        padding: 6px 14px;
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        color: #e2e8f0;
+        font-size: 12px;
+        pointer-events: none;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 8px #22c55e;
       }
     </style>
+
+    <!-- CRITICAL CAMERA POLYFILL & UNBLOCKER FOR MINDAR
+         Fixes OverconstrainedError on desktop/laptops & unblocks iOS WebKit autoplay -->
+    <script>
+      (function() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.warn("getUserMedia is not available on this browser or origin (requires HTTPS).");
+          return;
+        }
+
+        const nativeGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+
+        // Intercept getUserMedia so MindAR's hardcoded exact 'facingMode: environment' doesn't fail on webcams/laptops
+        navigator.mediaDevices.getUserMedia = async function(constraints) {
+          console.log("[AR Engine] Requesting camera with constraints:", constraints);
+
+          // 1. Try rear environment camera first, but as 'ideal' so it won't throw OverconstrainedError
+          try {
+            const idealConstraints = {
+              audio: false,
+              video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              }
+            };
+            const stream = await nativeGUM(idealConstraints);
+            console.log("[AR Engine] Camera opened successfully with ideal environment constraint.");
+            return stream;
+          } catch (err1) {
+            console.warn("[AR Engine] Ideal environment camera failed, falling back to any video device:", err1);
+            // 2. Fallback to generic video (laptop webcam, desktop camera, front camera)
+            try {
+              const fallbackStream = await nativeGUM({ audio: false, video: true });
+              console.log("[AR Engine] Camera opened with generic fallback stream.");
+              return fallbackStream;
+            } catch (err2) {
+              console.error("[AR Engine] All camera attempts failed:", err2);
+              throw err2;
+            }
+          }
+        };
+
+        // Intercept video elements so that when MindAR assigns srcObject to its camera video:
+        // 1. Property-level muted = true and playsInline = true are forced (required by WebKit/iOS)
+        // 2. .play() is explicitly initiated
+        // 3. The video is positioned correctly without negative z-index obscuring it
+        const originalSrcObjectDesc = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'srcObject');
+        if (originalSrcObjectDesc && originalSrcObjectDesc.set) {
+          Object.defineProperty(HTMLVideoElement.prototype, 'srcObject', {
+            set: function(val) {
+              originalSrcObjectDesc.set.call(this, val);
+              if (val && typeof MediaStream !== 'undefined' && val instanceof MediaStream) {
+                console.log("[AR Engine] MediaStream assigned to video element. Unblocking playback...");
+                this.muted = true;
+                this.defaultMuted = true;
+                this.playsInline = true;
+                this.setAttribute('playsinline', '');
+                this.setAttribute('webkit-playsinline', '');
+                this.setAttribute('autoplay', '');
+
+                // Ensure camera video is visible and sized properly
+                this.style.position = 'fixed';
+                this.style.top = '0px';
+                this.style.left = '0px';
+                this.style.width = '100vw';
+                this.style.height = '100vh';
+                this.style.objectFit = 'cover';
+                this.style.zIndex = '0';
+
+                // Explicitly invoke .play()
+                const playPromise = this.play();
+                if (playPromise !== undefined) {
+                  playPromise.catch(e => {
+                    console.warn("[AR Engine] Video play was deferred by browser policy:", e);
+                    const actionBtn = document.getElementById('error-action');
+                    if (actionBtn) {
+                      actionBtn.innerText = 'Tap to Start Camera';
+                      actionBtn.style.display = 'block';
+                      actionBtn.onclick = () => {
+                        this.play().then(() => {
+                          actionBtn.style.display = 'none';
+                        }).catch(() => {});
+                      };
+                    }
+                  });
+                }
+              }
+            },
+            get: function() {
+              return originalSrcObjectDesc.get.call(this);
+            }
+          });
+        }
+      })();
+    </script>
+
+    <!-- A-Frame & MindAR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   </head>
   <body>
+    <!-- Top Header Status -->
+    <div id="top-header">
+      <div class="status-dot"></div>
+      <span>AR Artwork Tracker</span>
+    </div>
+
     <!-- Visual Loading Screen -->
     <div id="ar-loader">
       <div class="spinner-ring" id="loader-spinner"></div>
-      <div class="loader-title" id="loader-title">Starting AR Artwork Experience</div>
-      <div class="loader-sub" id="loader-sub">Initializing camera & loading target tracker...</div>
-      <div class="loader-badge" id="loader-status">Requesting camera access...</div>
-      <button class="error-btn" id="error-action" onclick="location.reload()">Grant Permission & Retry</button>
+      <div class="loader-title" id="loader-title">Starting Camera</div>
+      <div class="loader-sub" id="loader-sub">Initializing live camera feed & loading target artwork...</div>
+      <div class="loader-badge" id="loader-status">Starting camera...</div>
+      <button class="action-btn" id="error-action">Allow Camera & Start</button>
     </div>
 
     <!-- Active Scanning Reticle -->
     <div id="scanning-hud">
       <div class="hud-frame">
-        <div style="font-size: 28px;">📷</div>
-        <div class="hud-text">Point camera at target artwork</div>
+        <div style="font-size: 32px; margin-bottom: 8px;">📷</div>
+        <div class="hud-text">Point camera at the artwork</div>
       </div>
     </div>
 
     <!-- Sound Toggle -->
-    <div id="audio-badge">🔊 Tap for Sound</div>
+    <div id="audio-badge">🔈 Sound Muted (Tap to Play)</div>
 
     <!-- A-Frame WebAR Scene with MindAR Tracking -->
     <a-scene
-      mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
+      mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4; autoStart: true;"
       color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights: true"
+      renderer="colorManagement: true, physicallyCorrectLights: true, alpha: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
+      style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1;"
     >
       <a-assets>
         <video
@@ -208,7 +357,7 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Target Anchor -->
+      <!-- Target Anchor: Glued to the detected physical artwork -->
       <a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
         <a-video
           id="ar-video-plane"
@@ -234,11 +383,21 @@
       const audioBadge = document.getElementById('audio-badge');
       const scene = document.querySelector('a-scene');
 
-      let isReady = false;
+      // Check HTTPS requirement
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        if (loaderSpinner) loaderSpinner.style.display = 'none';
+        if (loaderTitle) loaderTitle.innerText = 'HTTPS Connection Required';
+        if (loaderSub) loaderSub.innerText = 'Mobile browsers require a secure HTTPS connection for camera access. Please use your GitHub Pages https:// URL.';
+        if (loaderStatus) {
+          loaderStatus.innerText = 'Insecure HTTP origin';
+          loaderStatus.style.color = '#f87171';
+        }
+      }
 
       // Handle AR readiness
       scene.addEventListener('arReady', () => {
-        isReady = true;
+        console.log('[AR Engine] arReady event fired!');
+        document.body.style.background = 'transparent';
         if (loaderStatus) loaderStatus.innerText = '✓ Camera & Tracker ready!';
         setTimeout(() => {
           if (loader) loader.classList.add('loaded');
@@ -247,25 +406,41 @@
 
       // Handle Camera / Target errors gracefully
       scene.addEventListener('arError', (event) => {
-        isReady = false;
+        console.error('[AR Engine] arError event:', event);
         if (loaderSpinner) loaderSpinner.style.display = 'none';
-        if (loaderTitle) loaderTitle.innerText = 'Camera Access Required';
-        if (loaderSub) loaderSub.innerText = 'Please ensure camera permissions are allowed in your browser settings (requires HTTPS).';
+        if (loaderTitle) loaderTitle.innerText = 'Camera Access';
+        if (loaderSub) loaderSub.innerText = 'If camera permission was allowed, please tap below to initialize the camera stream.';
         if (loaderStatus) {
-          loaderStatus.innerText = 'Camera permission blocked or unavailable';
-          loaderStatus.style.color = '#f87171';
+          loaderStatus.innerText = 'Camera awaiting activation';
+          loaderStatus.style.color = '#38bdf8';
         }
-        if (errorAction) errorAction.style.display = 'block';
+        if (errorAction) {
+          errorAction.innerText = 'Start Camera Stream';
+          errorAction.style.display = 'block';
+          errorAction.onclick = () => {
+            navigator.mediaDevices.getUserMedia({ audio: false, video: true })
+              .then(stream => {
+                location.reload();
+              })
+              .catch(err => {
+                alert('Please allow camera permissions in your browser address bar settings.');
+              });
+          };
+        }
       });
 
-      // 1. Play video ONLY when camera sees the artwork
+      // 1. Play video ONLY when camera sees the physical artwork
       targetAnchor.addEventListener('targetFound', () => {
+        console.log('[AR Engine] Target artwork detected!');
         if (hud) hud.classList.add('hidden');
-        video.play().catch(() => {});
+        video.play().catch(e => {
+          console.warn('[AR Engine] Video play prevented:', e);
+        });
       });
 
       // 2. Pause immediately when camera looks away
       targetAnchor.addEventListener('targetLost', () => {
+        console.log('[AR Engine] Target lost.');
         if (hud) hud.classList.remove('hidden');
         video.pause();
       });
@@ -274,9 +449,12 @@
       function toggleAudio() {
         video.muted = !video.muted;
         if (video.muted) {
-          audioBadge.innerText = '🔈 Sound Muted';
+          audioBadge.innerText = '🔈 Sound Muted (Tap to Play)';
+          audioBadge.style.borderColor = 'rgba(255, 255, 255, 0.2)';
         } else {
           audioBadge.innerText = '🔊 Sound On';
+          audioBadge.style.borderColor = '#38bdf8';
+          video.play().catch(() => {});
         }
       }
 
@@ -285,11 +463,12 @@
         toggleAudio();
       });
 
+      // Tap screen to ensure audio or video playback is enabled on first gesture
       window.addEventListener('click', () => {
         if (video.muted) {
           toggleAudio();
         }
-      });
+      }, { once: true });
     </script>
   </body>
 </html>
