@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>AR Artwork Experience</title>
 
+    <!-- A-Frame & MindAR (Industry Standard WebAssembly Image Tracking) -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
     <style>
       * {
         box-sizing: border-box;
@@ -18,433 +22,74 @@
         background: #000;
         user-select: none;
         -webkit-user-select: none;
-        -webkit-touch-callout: none;
       }
 
-      /* Camera fills background */
-      #camera-video {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        pointer-events: none;
-        z-index: 1;
-      }
-
-      /* AR Container */
-      #ar-stage {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: auto;
-        z-index: 5;
-        overflow: hidden;
-        cursor: pointer;
-      }
-
-      /* Video overlay: STRICTLY the exact size of the physical artwork */
-      #video-anchor {
-        position: absolute;
-        display: none;
-        opacity: 0;
-        transform-origin: center center;
-        border-radius: 8px;
-        overflow: hidden;
-        border: 2px solid rgba(255, 255, 255, 0.9);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-        transition: opacity 0.2s ease-out;
-        background: transparent;
-      }
-
-      #video-anchor.active {
-        display: block;
-        opacity: 1;
-      }
-
-      #overlay-video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
-        pointer-events: none;
-      }
-
-      /* Notice if target image fails to load */
-      #error-toast {
-        display: none;
-        position: absolute;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(220, 38, 38, 0.85);
-        color: white;
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-family: sans-serif;
-        font-size: 11px;
-        z-index: 20;
-        backdrop-blur: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      }
+      /* Hide all default VR buttons and scanning overlays for a pure clean camera */
+      .a-enter-vr { display: none !important; }
+      .a-enter-ar { display: none !important; }
+      .mindar-ui-overlay { display: none !important; }
+      .mindar-ui-loading { display: none !important; }
+      .mindar-ui-scanning { display: none !important; }
     </style>
   </head>
   <body>
-    <!-- Live Camera Feed -->
-    <video id="camera-video" playsinline webkit-playsinline x5-playsinline muted autoplay></video>
-
-    <div id="error-toast"></div>
-
-    <!-- AR Layer: Video anchored strictly on top of physical artwork -->
-    <div id="ar-stage">
-      <div id="video-anchor">
+    <!-- A-Frame WebAR Scene -->
+    <a-scene
+      mindar-image="imageTargetSrc: assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <a-assets>
+        <!-- Your overlay video -->
         <video
-          id="overlay-video"
+          id="artwork-video"
+          src="assets/my-video.mp4"
+          preload="auto"
+          loop
           playsinline
           webkit-playsinline
           x5-playsinline
-          x5-video-player-type="h5-page"
-          x5-video-player-fullscreen="false"
-          loop
           muted
           crossorigin="anonymous"
-          preload="auto"
         ></video>
-      </div>
-    </div>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- Target Anchor: Glued 100% to your physical artwork -->
+      <a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
+        <!-- Video plane: Width: 1.333, Height: 1 (Standard 4:3 aspect ratio).
+             If your artwork is 16:9, set width="1.777". If 1:1 square, set width="1". -->
+        <a-video
+          id="ar-video-plane"
+          src="#artwork-video"
+          position="0 0 0"
+          height="1"
+          width="1.333"
+          rotation="0 0 0"
+        ></a-video>
+      </a-entity>
+    </a-scene>
 
     <script>
-      // =========================================================================
-      // 1. AR CONFIGURATION
-      // Change the paths below to your photo and video in your assets folder!
-      // =========================================================================
-      const AR_CONFIG = {
-        // Physical picture/artwork to recognize (can be "assets/artwork.jpg" or a URL)
-        targetArtworkImage: "assets/my-picture.jpg",
+      const video = document.getElementById('artwork-video');
+      const targetAnchor = document.getElementById('target-anchor');
 
-        // Video to play on top of physical picture (can be "assets/video.mp4" or a URL)
-        overlayVideo: "assets/my-video.mp4",
+      // 1. Play video ONLY when camera genuinely locks onto the physical artwork
+      targetAnchor.addEventListener('targetFound', () => {
+        video.play().catch(() => {});
+      });
 
-        // Aspect ratio of the physical picture (width / height, default 1.333 for 4:3)
-        aspectRatio: 1.333
-      };
+      // 2. Pause video immediately when camera looks away
+      targetAnchor.addEventListener('targetLost', () => {
+        video.pause();
+      });
 
-      const cameraVideo = document.getElementById('camera-video');
-      const overlayVideo = document.getElementById('overlay-video');
-      const videoAnchor = document.getElementById('video-anchor');
-      const arStage = document.getElementById('ar-stage');
-      const errorToast = document.getElementById('error-toast');
-
-      overlayVideo.src = AR_CONFIG.overlayVideo;
-
-      // Prevent mobile browsers from launching native fullscreen player
-      overlayVideo.setAttribute('playsinline', '');
-      overlayVideo.setAttribute('webkit-playsinline', '');
-      overlayVideo.muted = true;
-
-      // =========================================================================
-      // 2. Camera Access
-      // =========================================================================
-      async function initCamera() {
-        try {
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          });
-          cameraVideo.srcObject = stream;
-          cameraVideo.play().catch(() => {});
-        } catch (err) {
-          console.warn("Camera access denied or unavailable");
-        }
-      }
-      initCamera();
-
-      // =========================================================================
-      // 3. Angle-Tolerant Multi-Scale Target Descriptor
-      // =========================================================================
-      let targetDesc = null;
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = 320;
-      offCanvas.height = 240;
-      const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-
-      function loadTargetDescriptor(url) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            const size = 16; // 16x16 macro grid is highly tolerant to perspective tilt and angles!
-            const c = document.createElement('canvas');
-            c.width = size;
-            c.height = size;
-            const ctx = c.getContext('2d');
-            ctx.drawImage(img, 0, 0, size, size);
-            const data = ctx.getImageData(0, 0, size, size).data;
-
-            // 1. Macro luminance (zero-mean unit-variance)
-            const luma = new Float32Array(size * size);
-            let sum = 0;
-            for (let i = 0; i < size * size; i++) {
-              const val = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
-              luma[i] = val;
-              sum += val;
-            }
-            const mean = sum / (size * size);
-            let varSum = 0;
-            for (let i = 0; i < size * size; i++) {
-              luma[i] -= mean;
-              varSum += luma[i] * luma[i];
-            }
-            const std = Math.sqrt(varSum / (size * size)) || 1;
-            for (let i = 0; i < size * size; i++) luma[i] /= std;
-
-            // 2. Color distribution signature (16 bins RGB - 100% angle and tilt invariant!)
-            const colorHist = new Float32Array(16);
-            for (let i = 0; i < size * size; i++) {
-              const r = Math.floor((data[i * 4] / 256) * 2.5);
-              const g = Math.floor((data[i * 4 + 1] / 256) * 2.5);
-              const b = Math.floor((data[i * 4 + 2] / 256) * 2.5);
-              const bin = (r * 6 + g * 3 + b) % 16;
-              colorHist[bin] += 1;
-            }
-            for (let i = 0; i < 16; i++) colorHist[i] /= (size * size);
-
-            targetDesc = { luma, colorHist, size };
-          } catch (e) {
-            console.error("Failed to extract target descriptor", e);
-            targetDesc = null;
-          }
-        };
-        img.onerror = () => {
-          errorToast.innerText = "Error: Target image failed to load. Check path in AR_CONFIG!";
-          errorToast.style.display = "block";
-          targetDesc = null;
-        };
-        img.src = url;
-      }
-      loadTargetDescriptor(AR_CONFIG.targetArtworkImage);
-
-      // =========================================================================
-      // 4. Perspective & Angle-Tolerant Scanning Engine
-      // =========================================================================
-      let isTracking = false;
-      let consecutiveFound = 0;
-      let lostFrames = 999;
-      let smoothed = { x: 0.5, y: 0.5, w: 0.5, h: 0.5 / AR_CONFIG.aspectRatio };
-
-      function processCameraFrame() {
-        if (!targetDesc || cameraVideo.readyState < 2) {
-          isTracking = false;
-          return;
-        }
-
-        const sw = offCanvas.width;
-        const sh = offCanvas.height;
-        offCtx.drawImage(cameraVideo, 0, 0, sw, sh);
-        const frameData = offCtx.getImageData(0, 0, sw, sh).data;
-
-        const candidates = [];
-
-        // If already tracking: search around current position with fine steps
-        if (isTracking && lostFrames < 20) {
-          const offsets = [-0.06, 0, 0.06];
-          const scaleOffsets = [0.90, 1.0, 1.10];
-          for (const s of scaleOffsets) {
-            for (const dx of offsets) {
-              for (const dy of offsets) {
-                candidates.push({
-                  cx: Math.max(0.15, Math.min(0.85, smoothed.x + dx)),
-                  cy: Math.max(0.15, Math.min(0.85, smoothed.y + dy)),
-                  w: Math.max(0.20, Math.min(0.90, smoothed.w * s)),
-                  h: (smoothed.w * s) / AR_CONFIG.aspectRatio
-                });
-              }
-            }
-          }
-        } else {
-          // Global multi-scale pyramid: covers close-up, normal distance, and far
-          const scales = [0.35, 0.48, 0.64, 0.80];
-          const gridX = [0.35, 0.5, 0.65];
-          const gridY = [0.35, 0.5, 0.65];
-
-          // Center priority
-          for (const sc of scales) {
-            candidates.push({ cx: 0.5, cy: 0.5, w: sc, h: sc / AR_CONFIG.aspectRatio });
-          }
-          // Spatial grid
-          for (const sc of [0.45, 0.65]) {
-            for (const gx of gridX) {
-              for (const gy of gridY) {
-                if (gx === 0.5 && gy === 0.5) continue;
-                candidates.push({ cx: gx, cy: gy, w: sc, h: sc / AR_CONFIG.aspectRatio });
-              }
-            }
-          }
-        }
-
-        let bestScore = -1.0;
-        let bestCand = null;
-
-        for (const cand of candidates) {
-          const score = evaluateCandidate(frameData, sw, sh, cand.cx, cand.cy, cand.w, cand.h);
-          if (score > bestScore) {
-            bestScore = score;
-            bestCand = cand;
-          }
-        }
-
-        // Angle-tolerant thresholds:
-        // Initial detection: 0.42 (detects physical pictures at angles up to ~45°)
-        // Continuous tracking: 0.28 (maintains lock while moving)
-        const threshold = isTracking ? 0.28 : 0.42;
-
-        if (bestScore >= threshold && bestCand) {
-          consecutiveFound++;
-          lostFrames = 0;
-
-          if (consecutiveFound >= 2 || isTracking) {
-            isTracking = true;
-
-            const alpha = 0.32;
-            smoothed.x = smoothed.x * (1 - alpha) + bestCand.cx * alpha;
-            smoothed.y = smoothed.y * (1 - alpha) + bestCand.cy * alpha;
-            smoothed.w = smoothed.w * (1 - alpha) + bestCand.w * alpha;
-            smoothed.h = smoothed.w / AR_CONFIG.aspectRatio;
-          }
-        } else {
-          consecutiveFound = 0;
-          lostFrames++;
-          if (lostFrames > 20) {
-            isTracking = false;
-          }
-        }
-      }
-
-      function evaluateCandidate(frameData, sw, sh, cx, cy, w, h) {
-        if (!targetDesc) return -1;
-        const startX = Math.max(0, Math.floor((cx - w / 2) * sw));
-        const startY = Math.max(0, Math.floor((cy - h / 2) * sh));
-        const regW = Math.min(sw - startX, Math.floor(w * sw));
-        const regH = Math.min(sh - startY, Math.floor(h * sh));
-        if (regW < 16 || regH < 16) return -1;
-
-        const size = targetDesc.size;
-        const stepX = regW / size;
-        const stepY = regH / size;
-
-        let sum = 0;
-        const sampleLuma = new Float32Array(size * size);
-        const sampleHist = new Float32Array(16);
-
-        for (let sy = 0; sy < size; sy++) {
-          for (let sx = 0; sx < size; sx++) {
-            const px = Math.floor(startX + sx * stepX);
-            const py = Math.floor(startY + sy * stepY);
-            const idx = (py * sw + px) * 4;
-
-            const r = frameData[idx];
-            const g = frameData[idx + 1];
-            const b = frameData[idx + 2];
-
-            const l = 0.299 * r + 0.587 * g + 0.114 * b;
-            sampleLuma[sy * size + sx] = l;
-            sum += l;
-
-            const binR = Math.floor((r / 256) * 2.5);
-            const binG = Math.floor((g / 256) * 2.5);
-            const binB = Math.floor((b / 256) * 2.5);
-            const bin = (binR * 6 + binG * 3 + binB) % 16;
-            sampleHist[bin] += 1;
-          }
-        }
-
-        const mean = sum / (size * size);
-        let varSum = 0;
-        for (let i = 0; i < size * size; i++) {
-          sampleLuma[i] -= mean;
-          varSum += sampleLuma[i] * sampleLuma[i];
-        }
-        const std = Math.sqrt(varSum / (size * size));
-
-        // Rejection filter: Blank walls, flat floors, solid colors have std < 5.0 -> reject immediately
-        if (std < 5.0) return -1;
-
-        for (let i = 0; i < size * size; i++) sampleLuma[i] /= std;
-
-        // 1. Macro luminance correlation (tolerant to perspective angles)
-        let dot = 0;
-        for (let i = 0; i < size * size; i++) {
-          dot += sampleLuma[i] * targetDesc.luma[i];
-        }
-        const r_luma = dot / (size * size); // strictly in [-1, 1]
-
-        // 2. Color distribution intersection (100% angle invariant)
-        let colorMatch = 0;
-        const total = size * size;
-        for (let i = 0; i < 16; i++) {
-          colorMatch += Math.min(sampleHist[i] / total, targetDesc.colorHist[i]);
-        }
-
-        // Fast reject: If luminance has zero or negative correlation, reject immediately
-        if (r_luma < 0.10) return -1;
-
-        // Combined score (60% macro structure + 40% color balance)
-        const score = r_luma * 0.60 + colorMatch * 0.40;
-        return score;
-      }
-
-      // =========================================================================
-      // 5. Render Loop: Position Video Directly on Detected Physical Artwork
-      // =========================================================================
-      function renderLoop() {
-        requestAnimationFrame(renderLoop);
-        processCameraFrame();
-
-        if (isTracking) {
-          if (overlayVideo.paused) {
-            overlayVideo.play().catch(() => {});
-          }
-
-          const screenW = window.innerWidth;
-          const screenH = window.innerHeight;
-
-          // Video size matches the physical artwork's size on screen
-          const pixelW = Math.round(screenW * smoothed.w);
-          const pixelH = Math.round(pixelW / AR_CONFIG.aspectRatio);
-
-          const pixelX = Math.round(screenW * smoothed.x - pixelW / 2);
-          const pixelY = Math.round(screenH * smoothed.y - pixelH / 2);
-
-          videoAnchor.style.width = pixelW + 'px';
-          videoAnchor.style.height = pixelH + 'px';
-          videoAnchor.style.transform = `translate3d(${pixelX}px, ${pixelY}px, 0px)`;
-
-          if (!videoAnchor.classList.contains('active')) {
-            videoAnchor.classList.add('active');
-          }
-        } else {
-          // Hide video completely when artwork is NOT in view
-          if (videoAnchor.classList.contains('active')) {
-            videoAnchor.classList.remove('active');
-          }
-          if (!overlayVideo.paused) {
-            overlayVideo.pause();
-          }
-        }
-      }
-      renderLoop();
-
-      // =========================================================================
-      // 6. User Tap: Toggle Audio Mute / Unmute
-      // =========================================================================
-      arStage.addEventListener('click', () => {
-        overlayVideo.muted = !overlayVideo.muted;
+      // 3. Tap anywhere on screen to toggle audio (mute / unmute)
+      window.addEventListener('click', () => {
+        video.muted = !video.muted;
       });
     </script>
   </body>
