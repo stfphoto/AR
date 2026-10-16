@@ -30,9 +30,76 @@
       .mindar-ui-overlay { display: none !important; }
       .mindar-ui-loading { display: none !important; }
       .mindar-ui-scanning { display: none !important; }
+
+      /* Visual Loading Overlay */
+      #ar-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        transition: opacity 0.4s ease-out, visibility 0.4s;
+      }
+
+      #ar-loader.loaded {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .spinner-ring {
+        width: 64px;
+        height: 64px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #38bdf8;
+        border-right-color: #2dd4bf;
+        border-radius: 50%;
+        animation: spin 1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+        margin-bottom: 20px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loader-title {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+      }
+
+      .loader-sub {
+        font-size: 13px;
+        color: #94a3b8;
+        margin-bottom: 20px;
+      }
+
+      .loader-badge {
+        font-size: 11px;
+        font-family: monospace;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 999px;
+        padding: 5px 14px;
+        color: #38bdf8;
+      }
     </style>
   </head>
   <body>
+    <!-- Visual Loading Screen -->
+    <div id="ar-loader">
+      <div class="spinner-ring"></div>
+      <div class="loader-title">Starting AR Artwork Experience</div>
+      <div class="loader-sub">Initializing camera & loading target tracker...</div>
+      <div class="loader-badge" id="loader-status">Preparing AR scene...</div>
+    </div>
     <!-- A-Frame WebAR Scene with Rock-Solid MindAR Tracking -->
     <a-scene
       mindar-image="imageTargetSrc: assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
@@ -76,6 +143,31 @@
     <script>
       const video = document.getElementById('artwork-video');
       const targetAnchor = document.getElementById('target-anchor');
+      const loader = document.getElementById('ar-loader');
+      const loaderStatus = document.getElementById('loader-status');
+      const scene = document.querySelector('a-scene');
+
+      // Update loading status and dismiss when tracker & camera are ready
+      scene.addEventListener('arReady', () => {
+        if (loaderStatus) loaderStatus.innerText = 'Camera & Tracker ready!';
+        setTimeout(() => {
+          if (loader) loader.classList.add('loaded');
+        }, 300);
+      });
+
+      scene.addEventListener('arError', () => {
+        if (loaderStatus) {
+          loaderStatus.innerText = 'Camera permission required';
+          loaderStatus.style.color = '#f87171';
+        }
+      });
+
+      // Fallback timer: ensure overlay fades if scene rendered
+      setTimeout(() => {
+        if (loader && !loader.classList.contains('loaded')) {
+          loader.classList.add('loaded');
+        }
+      }, 5000);
 
       // 1. Play video ONLY when the camera actually sees the physical artwork
       targetAnchor.addEventListener('targetFound', () => {
