@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>AR Artwork Experience</title>
 
-    <!-- A-Frame & MindAR (Industry Standard WebAssembly Image Tracking) -->
+    <!-- A-Frame & MindAR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -22,9 +22,10 @@
         background: #000;
         user-select: none;
         -webkit-user-select: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
-      /* Hide all default A-Frame VR buttons and MindAR scanning screens for a clean camera view */
+      /* Hide default A-Frame VR buttons and standard MindAR scanning screens */
       .a-enter-vr { display: none !important; }
       .a-enter-ar { display: none !important; }
       .mindar-ui-overlay { display: none !important; }
@@ -42,7 +43,8 @@
         justify-content: center;
         background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
         color: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        padding: 24px;
+        text-align: center;
         transition: opacity 0.4s ease-out, visibility 0.4s;
       }
 
@@ -69,7 +71,7 @@
       }
 
       .loader-title {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 600;
         letter-spacing: 0.5px;
         margin-bottom: 6px;
@@ -79,6 +81,7 @@
         font-size: 13px;
         color: #94a3b8;
         margin-bottom: 20px;
+        max-width: 300px;
       }
 
       .loader-badge {
@@ -87,32 +90,112 @@
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 999px;
-        padding: 5px 14px;
+        padding: 6px 16px;
         color: #38bdf8;
+      }
+
+      .error-btn {
+        display: none;
+        margin-top: 18px;
+        padding: 10px 20px;
+        background: #38bdf8;
+        color: #0f172a;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+      }
+
+      /* Scanning Reticle */
+      #scanning-hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        transition: opacity 0.3s;
+      }
+
+      #scanning-hud.hidden {
+        opacity: 0;
+      }
+
+      .hud-frame {
+        position: relative;
+        width: 260px;
+        height: 260px;
+        border: 2px dashed rgba(56, 189, 248, 0.4);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .hud-text {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(0, 0, 0, 0.6);
+        padding: 6px 14px;
+        border-radius: 999px;
+        margin-top: 16px;
+        backdrop-filter: blur(4px);
+      }
+
+      /* Audio Status Badge */
+      #audio-badge {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1001;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
       }
     </style>
   </head>
   <body>
     <!-- Visual Loading Screen -->
     <div id="ar-loader">
-      <div class="spinner-ring"></div>
-      <div class="loader-title">Starting AR Artwork Experience</div>
-      <div class="loader-sub">Initializing camera & loading target tracker...</div>
-      <div class="loader-badge" id="loader-status">Preparing AR scene...</div>
+      <div class="spinner-ring" id="loader-spinner"></div>
+      <div class="loader-title" id="loader-title">Starting AR Artwork Experience</div>
+      <div class="loader-sub" id="loader-sub">Initializing camera & loading target tracker...</div>
+      <div class="loader-badge" id="loader-status">Requesting camera access...</div>
+      <button class="error-btn" id="error-action" onclick="location.reload()">Grant Permission & Retry</button>
     </div>
-    <!-- A-Frame WebAR Scene with Rock-Solid MindAR Tracking -->
+
+    <!-- Active Scanning Reticle -->
+    <div id="scanning-hud">
+      <div class="hud-frame">
+        <div style="font-size: 28px;">📷</div>
+        <div class="hud-text">Point camera at target artwork</div>
+      </div>
+    </div>
+
+    <!-- Sound Toggle -->
+    <div id="audio-badge">🔊 Tap for Sound</div>
+
+    <!-- A-Frame WebAR Scene with MindAR Tracking -->
     <a-scene
-      mindar-image="imageTargetSrc: assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
+      mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
       color-space="sRGB"
       renderer="colorManagement: true, physicallyCorrectLights: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <!-- The video that will play on top of your physical artwork -->
         <video
           id="artwork-video"
-          src="assets/my-video.mp4"
+          src="./assets/my-video.mp4"
           preload="auto"
           loop
           playsinline
@@ -125,10 +208,8 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Target Anchor: Glued 100% to your physical artwork -->
+      <!-- Target Anchor -->
       <a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
-        <!-- Video plane: Width: 1.333, Height: 1 (Standard 4:3 aspect ratio).
-             If your artwork is 16:9, change width to 1.777. If 1:1 square, change width to 1. -->
         <a-video
           id="ar-video-plane"
           src="#artwork-video"
@@ -145,43 +226,69 @@
       const targetAnchor = document.getElementById('target-anchor');
       const loader = document.getElementById('ar-loader');
       const loaderStatus = document.getElementById('loader-status');
+      const loaderTitle = document.getElementById('loader-title');
+      const loaderSub = document.getElementById('loader-sub');
+      const loaderSpinner = document.getElementById('loader-spinner');
+      const errorAction = document.getElementById('error-action');
+      const hud = document.getElementById('scanning-hud');
+      const audioBadge = document.getElementById('audio-badge');
       const scene = document.querySelector('a-scene');
 
-      // Update loading status and dismiss when tracker & camera are ready
+      let isReady = false;
+
+      // Handle AR readiness
       scene.addEventListener('arReady', () => {
-        if (loaderStatus) loaderStatus.innerText = 'Camera & Tracker ready!';
+        isReady = true;
+        if (loaderStatus) loaderStatus.innerText = '✓ Camera & Tracker ready!';
         setTimeout(() => {
           if (loader) loader.classList.add('loaded');
         }, 300);
       });
 
-      scene.addEventListener('arError', () => {
+      // Handle Camera / Target errors gracefully
+      scene.addEventListener('arError', (event) => {
+        isReady = false;
+        if (loaderSpinner) loaderSpinner.style.display = 'none';
+        if (loaderTitle) loaderTitle.innerText = 'Camera Access Required';
+        if (loaderSub) loaderSub.innerText = 'Please ensure camera permissions are allowed in your browser settings (requires HTTPS).';
         if (loaderStatus) {
-          loaderStatus.innerText = 'Camera permission required';
+          loaderStatus.innerText = 'Camera permission blocked or unavailable';
           loaderStatus.style.color = '#f87171';
         }
+        if (errorAction) errorAction.style.display = 'block';
       });
 
-      // Fallback timer: ensure overlay fades if scene rendered
-      setTimeout(() => {
-        if (loader && !loader.classList.contains('loaded')) {
-          loader.classList.add('loaded');
-        }
-      }, 5000);
-
-      // 1. Play video ONLY when the camera actually sees the physical artwork
+      // 1. Play video ONLY when camera sees the artwork
       targetAnchor.addEventListener('targetFound', () => {
+        if (hud) hud.classList.add('hidden');
         video.play().catch(() => {});
       });
 
-      // 2. Pause video immediately when camera looks away
+      // 2. Pause immediately when camera looks away
       targetAnchor.addEventListener('targetLost', () => {
+        if (hud) hud.classList.remove('hidden');
         video.pause();
       });
 
-      // 3. Tap anywhere on screen to toggle audio (mute / unmute)
-      window.addEventListener('click', () => {
+      // 3. Audio toggle
+      function toggleAudio() {
         video.muted = !video.muted;
+        if (video.muted) {
+          audioBadge.innerText = '🔈 Sound Muted';
+        } else {
+          audioBadge.innerText = '🔊 Sound On';
+        }
+      }
+
+      audioBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAudio();
+      });
+
+      window.addEventListener('click', () => {
+        if (video.muted) {
+          toggleAudio();
+        }
       });
     </script>
   </body>
