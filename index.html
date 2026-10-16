@@ -24,7 +24,7 @@
         -webkit-user-select: none;
       }
 
-      /* Hide all default VR buttons and scanning overlays for a pure clean camera */
+      /* Hide all default A-Frame VR buttons and MindAR scanning screens for a clean camera view */
       .a-enter-vr { display: none !important; }
       .a-enter-ar { display: none !important; }
       .mindar-ui-overlay { display: none !important; }
@@ -33,7 +33,7 @@
     </style>
   </head>
   <body>
-    <!-- A-Frame WebAR Scene -->
+    <!-- A-Frame WebAR Scene with Rock-Solid MindAR Tracking -->
     <a-scene
       mindar-image="imageTargetSrc: assets/targets.mind; filterMinCF: 0.001; filterBeta: 1000; warmupTolerance: 2; missTolerance: 4;"
       color-space="sRGB"
@@ -42,7 +42,7 @@
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
-        <!-- Your overlay video -->
+        <!-- The video that will play on top of your physical artwork -->
         <video
           id="artwork-video"
           src="assets/my-video.mp4"
@@ -61,7 +61,7 @@
       <!-- Target Anchor: Glued 100% to your physical artwork -->
       <a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
         <!-- Video plane: Width: 1.333, Height: 1 (Standard 4:3 aspect ratio).
-             If your artwork is 16:9, set width="1.777". If 1:1 square, set width="1". -->
+             If your artwork is 16:9, change width to 1.777. If 1:1 square, change width to 1. -->
         <a-video
           id="ar-video-plane"
           src="#artwork-video"
@@ -77,7 +77,7 @@
       const video = document.getElementById('artwork-video');
       const targetAnchor = document.getElementById('target-anchor');
 
-      // 1. Play video ONLY when camera genuinely locks onto the physical artwork
+      // 1. Play video ONLY when the camera actually sees the physical artwork
       targetAnchor.addEventListener('targetFound', () => {
         video.play().catch(() => {});
       });
