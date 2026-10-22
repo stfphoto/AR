@@ -1,811 +1,811 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>AR Artwork Experience</title>
-
-<style>
-* {
-box-sizing: border-box;
-}
-html, body {
-margin: 0;
-padding: 0;
-width: 100%;
-height: 100%;
-overflow: hidden;
-background: transparent !important;
-user-select: none;
--webkit-user-select: none;
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-/* Hide default A-Frame VR buttons and standard MindAR scanning screens */
-.a-enter-vr { display: none !important; }
-.a-enter-ar { display: none !important; }
-.mindar-ui-overlay { display: none !important; }
-.mindar-ui-loading { display: none !important; }
-.mindar-ui-scanning { display: none !important; }
-
-/* Force MindAR camera video feed to sit in background, full viewport cover */
-video:not(#artwork-video) {
-position: fixed !important;
-top: 0 !important;
-left: 0 !important;
-width: 100vw !important;
-height: 100vh !important;
-object-fit: cover !important;
-z-index: 0 !important;
-pointer-events: none !important;
-}
-
-/* Force A-Frame canvas to be transparent over video */
-a-scene canvas.a-canvas {
-background: transparent !important;
-position: fixed !important;
-top: 0 !important;
-left: 0 !important;
-width: 100vw !important;
-height: 100vh !important;
-z-index: 1 !important;
-}
-
-/* Visual Loading Overlay */
-#ar-loader {
-position: fixed;
-inset: 0;
-z-index: 99999;
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
-color: #fff;
-padding: 24px;
-text-align: center;
-transition: opacity 0.4s ease-out, visibility 0.4s;
-}
-
-#ar-loader.loaded {
-opacity: 0;
-visibility: hidden;
-pointer-events: none;
-}
-
-.spinner-ring {
-width: 64px;
-height: 64px;
-border: 3px solid rgba(255, 255, 255, 0.1);
-border-top-color: #38bdf8;
-border-right-color: #2dd4bf;
-border-radius: 50%;
-animation: spin 1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
-margin-bottom: 20px;
-}
-
-@keyframes spin {
-0% { transform: rotate(0deg); }
-100% { transform: rotate(360deg); }
-}
-
-.loader-title {
-font-size: 18px;
-font-weight: 600;
-letter-spacing: 0.3px;
-margin-bottom: 6px;
-}
-
-.loader-sub {
-font-size: 13px;
-color: #94a3b8;
-margin-bottom: 20px;
-max-width: 300px;
-line-height: 1.5;
-}
-
-.loader-badge {
-font-size: 11px;
-font-family: monospace;
-background: rgba(255, 255, 255, 0.08);
-border: 1px solid rgba(255, 255, 255, 0.15);
-border-radius: 999px;
-padding: 6px 16px;
-color: #38bdf8;
-}
-
-.action-btn {
-display: none;
-margin-top: 18px;
-padding: 12px 24px;
-background: linear-gradient(135deg, #38bdf8 0%, #2dd4bf 100%);
-color: #04121d;
-font-size: 14px;
-font-weight: 600;
-border-radius: 999px;
-border: none;
-cursor: pointer;
-box-shadow: 0 4px 15px rgba(56, 189, 248, 0.35);
-}
-
-/* Active Scanning Reticle */
-#scanning-hud {
-position: fixed;
-inset: 0;
-pointer-events: none;
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-z-index: 1000;
-transition: opacity 0.3s;
-}
-
-#scanning-hud.hidden {
-opacity: 0;
-}
-
-.hud-frame {
-position: relative;
-width: 270px;
-height: 270px;
-border: 2px dashed rgba(56, 189, 248, 0.5);
-border-radius: 18px;
-display: flex;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-box-shadow: 0 0 30px rgba(56, 189, 248, 0.15);
-}
-
-.hud-text {
-font-size: 12px;
-color: rgba(255, 255, 255, 0.9);
-background: rgba(15, 23, 42, 0.75);
-padding: 8px 16px;
-border-radius: 999px;
-margin-top: 18px;
-backdrop-filter: blur(8px);
-border: 1px solid rgba(255, 255, 255, 0.12);
-letter-spacing: 0.3px;
-}
-
-/* Audio Status Badge */
-#audio-badge {
-position: fixed;
-bottom: 24px;
-right: 20px;
-z-index: 1001;
-background: rgba(15, 23, 42, 0.85);
-color: #fff;
-border: 1px solid rgba(255, 255, 255, 0.2);
-padding: 10px 18px;
-border-radius: 999px;
-font-size: 13px;
-font-weight: 500;
-backdrop-filter: blur(8px);
-cursor: pointer;
-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-transition: all 0.2s ease;
-}
-
-/* Top Header Status */
-#top-header {
-position: fixed;
-top: 16px;
-left: 50%;
-transform: translateX(-50%);
-z-index: 1001;
-display: flex;
-align-items: center;
-gap: 8px;
-background: rgba(15, 23, 42, 0.75);
-border: 1px solid rgba(255, 255, 255, 0.15);
-padding: 6px 14px;
-border-radius: 999px;
-backdrop-filter: blur(8px);
-color: #e2e8f0;
-font-size: 12px;
-pointer-events: none;
-}
-
-.status-dot {
-width: 8px;
-height: 8px;
-border-radius: 50%;
-background: #22c55e;
-box-shadow: 0 0 8px #22c55e;
-}
-
-/* Mode Toggles for Stability & Border Frame */
-#bottom-controls {
-position: fixed;
-bottom: 24px;
-left: 20px;
-z-index: 1001;
-display: flex;
-flex-direction: column;
-gap: 8px;
-}
-
-.control-pill {
-background: rgba(15, 23, 42, 0.88);
-border: 1px solid rgba(56, 189, 248, 0.3);
-padding: 9px 16px;
-border-radius: 999px;
-font-size: 12px;
-font-weight: 500;
-backdrop-filter: blur(10px);
-cursor: pointer;
-box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-display: flex;
-align-items: center;
-gap: 6px;
-color: #38bdf8;
-transition: all 0.2s ease;
-}
-
-.control-pill:active {
-transform: scale(0.96);
-}
-</style>
-
-<!-- CAMERA INITIALIZER & POLYFILL FOR MINDAR -->
-<script>
-(function() {
-if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-console.warn("getUserMedia is not available on this browser or origin (requires HTTPS).");
-return;
-}
-
-const nativeGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-
-// Intercept getUserMedia so MindAR's exact facingMode doesn't fail on laptops/desktops
-navigator.mediaDevices.getUserMedia = async function(constraints) {
-console.log("[AR Engine] Requesting camera with constraints:", constraints);
-try {
-const idealConstraints = {
-audio: false,
-video: {
-facingMode: { ideal: "environment" },
-width: { ideal: 1280 },
-height: { ideal: 720 }
-}
-};
-const stream = await nativeGUM(idealConstraints);
-console.log("[AR Engine] Camera opened successfully with ideal environment constraint.");
-return stream;
-} catch (err1) {
-console.warn("[AR Engine] Ideal environment camera failed, falling back to any video device:", err1);
-try {
-const fallbackStream = await nativeGUM({ audio: false, video: true });
-console.log("[AR Engine] Camera opened with generic fallback stream.");
-return fallbackStream;
-} catch (err2) {
-console.error("[AR Engine] All camera attempts failed:", err2);
-throw err2;
-}
-}
-};
-
-// Intercept video elements so MindAR's camera video plays reliably
-const originalSrcObjectDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
-if (originalSrcObjectDesc && originalSrcObjectDesc.set) {
-Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
-set: function(stream) {
-originalSrcObjectDesc.set.call(this, stream);
-if (this.id !== 'artwork-video' && stream) {
-this.setAttribute('autoplay', '');
-this.setAttribute('muted', '');
-this.setAttribute('playsinline', '');
-this.setAttribute('webkit-playsinline', '');
-this.muted = true;
-this.playsInline = true;
-
-this.style.position = 'fixed';
-this.style.top = '0';
-this.style.left = '0';
-this.style.width = '100vw';
-this.style.height = '100vh';
-this.style.objectFit = 'cover';
-this.style.zIndex = '0';
-
-const attemptPlay = () => {
-this.play().then(() => {
-console.log("[AR Engine] Camera video play() succeeded.");
-}).catch(e => {
-console.warn("[AR Engine] Camera video play() pending gesture:", e);
-});
-};
-
-this.addEventListener('loadedmetadata', attemptPlay, { once: true });
-attemptPlay();
-
-const unlock = () => {
-if (this.paused) {
-this.play().catch(() => {});
-}
-window.removeEventListener('click', unlock);
-window.removeEventListener('touchstart', unlock);
-};
-window.addEventListener('click', unlock, { once: true });
-window.addEventListener('touchstart', unlock, { once: true });
-}
-},
-get: function() {
-return originalSrcObjectDesc.get.call(this);
-}
-});
-}
-})();
-</script>
-
-<!-- A-Frame & MindAR -->
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-</head>
-<body>
-<!-- Top Header Status -->
-<div id="top-header">
-<div class="status-dot"></div>
-<span>AR Artwork Tracker</span>
-</div>
-
-<!-- Visual Loading Screen -->
-<div id="ar-loader">
-<div class="spinner-ring" id="loader-spinner"></div>
-<div class="loader-title" id="loader-title">Starting Camera</div>
-<div class="loader-sub" id="loader-sub">Initializing live camera feed & loading target artwork...</div>
-<div class="loader-badge" id="loader-status">Starting camera...</div>
-<button class="action-btn" id="error-action">Allow Camera & Start</button>
-</div>
-
-<!-- Active Scanning Reticle -->
-<div id="scanning-hud">
-<div class="hud-frame">
-<div style="font-size: 32px; margin-bottom: 8px;">📷</div>
-<div class="hud-text">Point camera at the artwork</div>
-</div>
-</div>
-
-<!-- Bottom Left Controls (Stability & Border Frame) -->
-<div id="bottom-controls">
-<div id="stability-badge" class="control-pill" title="Click to cycle stability modes">
-<span>🛡️ Stabilizer: <strong>Ultra-Smooth</strong></span>
-</div>
-<div id="border-badge" class="control-pill" title="Click to cycle overlay border frame styles">
-<span>🖼️ Border: <strong>Neon Cyan</strong></span>
-</div>
-</div>
-
-<!-- Sound Toggle -->
-<div id="audio-badge">🔈 Sound Muted (Tap for Sound)</div>
-
-<!-- A-Frame WebAR Scene with MindAR Tracking
-Stabilization settings:
-- filterMinCF: 0.00008 (removes high-frequency micro-tremor when holding still)
-- filterBeta: 0.03 (suppresses erratic velocity spikes)
-- missTolerance: 10 (keeps overlay locked across temporary blurs/motion)
-- warmupTolerance: 2 (quick detection) -->
-<a-scene
-mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.00008; filterBeta: 0.03; warmupTolerance: 2; missTolerance: 10; autoStart: true;"
-color-space="sRGB"
-renderer="colorManagement: true, physicallyCorrectLights: true, alpha: true"
-vr-mode-ui="enabled: false"
-device-orientation-permission-ui="enabled: false"
-style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1;"
->
-<a-assets>
-<!-- Artwork 1 Video Overlay -->
-<video
-id="artwork-video"
-src="./assets/my-video.mp4"
-preload="auto"
-loop
-playsinline
-webkit-playsinline
-x5-playsinline
-muted
-crossorigin="anonymous"
-></video>
-
-<!-- Artwork 2 Video Overlay (Change src to your 2nd video, e.g. ./assets/video2.mp4) -->
-<video
-id="artwork-video-2"
-src="./assets/my-video2.mp4"
-preload="auto"
-loop
-playsinline
-webkit-playsinline
-x5-playsinline
-muted
-crossorigin="anonymous"
-></video>
-
-<!-- Artwork 3 Video Overlay (Change src to your 3rd video, e.g. ./assets/video3.mp4) -->
-<video
-id="artwork-video-3"
-src="./assets/my-video3.mp4"
-preload="auto"
-loop
-playsinline
-webkit-playsinline
-x5-playsinline
-muted
-crossorigin="anonymous"
-></video>
-</a-assets>
-
-<a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-<!-- Target Anchor 1: First Physical Artwork (targetIndex: 0) -->
-<a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
-<!-- Glowing Frame Border Plane Behind Video Plane -->
-<a-plane
-id="ar-video-border-1"
-position="0 0 -0.005"
-width="1.838"
-height="1.06"
-color="#38bdf8"
-material="shader: flat; opacity: 0.95; transparent: true;"
-></a-plane>
-<a-video
-id="ar-video-plane"
-src="#artwork-video"
-position="0 0 0"
-height="1"
-width="1.778"
-rotation="0 0 0"
-></a-video>
-</a-entity>
-
-<!-- Target Anchor 2: Second Physical Artwork (targetIndex: 1) -->
-<a-entity id="target-anchor-2" mindar-image-target="targetIndex: 1">
-<!-- Glowing Frame Border Plane Behind Video Plane -->
-<a-plane
-id="ar-video-border-2"
-position="0 0 -0.005"
-width="1.838"
-height="1.06"
-color="#38bdf8"
-material="shader: flat; opacity: 0.95; transparent: true;"
-></a-plane>
-<a-video
-id="ar-video-plane-2"
-src="#artwork-video-2"
-position="0 0 0"
-height="1"
-width="1.778"
-rotation="0 0 0"
-></a-video>
-</a-entity>
-
-<!-- Target Anchor 3: Third Physical Artwork (targetIndex: 2) -->
-<a-entity id="target-anchor-3" mindar-image-target="targetIndex: 2">
-<!-- Glowing Frame Border Plane Behind Video Plane -->
-<a-plane
-id="ar-video-border-3"
-position="0 0 -0.005"
-width="1.838"
-height="1.06"
-color="#38bdf8"
-material="shader: flat; opacity: 0.95; transparent: true;"
-></a-plane>
-<a-video
-id="ar-video-plane-3"
-src="#artwork-video-3"
-position="0 0 0"
-height="1"
-width="1.778"
-rotation="0 0 0"
-></a-video>
-</a-entity>
-</a-scene>
-
-<script>
-const video1 = document.getElementById('artwork-video');
-const targetAnchor1 = document.getElementById('target-anchor');
-const videoPlane1 = document.getElementById('ar-video-plane');
-const border1 = document.getElementById('ar-video-border-1');
-
-const video2 = document.getElementById('artwork-video-2');
-const targetAnchor2 = document.getElementById('target-anchor-2');
-const videoPlane2 = document.getElementById('ar-video-plane-2');
-const border2 = document.getElementById('ar-video-border-2');
-
-const video3 = document.getElementById('artwork-video-3');
-const targetAnchor3 = document.getElementById('target-anchor-3');
-const videoPlane3 = document.getElementById('ar-video-plane-3');
-const border3 = document.getElementById('ar-video-border-3');
-
-const loader = document.getElementById('ar-loader');
-const loaderStatus = document.getElementById('loader-status');
-const loaderTitle = document.getElementById('loader-title');
-const loaderSub = document.getElementById('loader-sub');
-const loaderSpinner = document.getElementById('loader-spinner');
-const errorAction = document.getElementById('error-action');
-const hud = document.getElementById('scanning-hud');
-const audioBadge = document.getElementById('audio-badge');
-const stabilityBadge = document.getElementById('stability-badge');
-const borderBadge = document.getElementById('border-badge');
-const bottomControls = document.getElementById('bottom-controls');
-const scene = document.querySelector('a-scene');
-
-// Helper to auto-fit video planes and border frames to aspect ratio
-function setupVideoAutoFit(videoEl, planeEl, borderEl) {
-if (!videoEl || !planeEl) return;
-videoEl.addEventListener('loadedmetadata', () => {
-if (videoEl.videoWidth && videoEl.videoHeight) {
-const aspect = videoEl.videoWidth / videoEl.videoHeight;
-planeEl.setAttribute('width', aspect.toFixed(3));
-planeEl.setAttribute('height', '1');
-if (borderEl) {
-const borderPad = 0.06; // Elegant border frame margin
-borderEl.setAttribute('width', (aspect + borderPad).toFixed(3));
-borderEl.setAttribute('height', (1 + borderPad).toFixed(3));
-}
-console.log('[AR Engine] Video & border aspect ratio set:', aspect.toFixed(3));
-}
-});
-
-videoEl.addEventListener('playing', () => {
-if (planeEl.components && planeEl.components.material) {
-const mat = planeEl.components.material.material;
-if (mat && mat.map) {
-mat.map.needsUpdate = true;
-}
-}
-});
-}
-
-setupVideoAutoFit(video1, videoPlane1, border1);
-setupVideoAutoFit(video2, videoPlane2, border2);
-setupVideoAutoFit(video3, videoPlane3, border3);
-
-// Check HTTPS requirement
-if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-if (loaderSpinner) loaderSpinner.style.display = 'none';
-if (loaderTitle) loaderTitle.innerText = 'HTTPS Connection Required';
-if (loaderSub) loaderSub.innerText = 'Mobile browsers require a secure HTTPS connection for camera access. Please use your GitHub Pages https:// URL.';
-if (loaderStatus) {
-loaderStatus.innerText = 'Insecure HTTP origin';
-loaderStatus.style.color = '#f87171';
-}
-}
-
-// Handle AR readiness
-scene.addEventListener('arReady', () => {
-console.log('[AR Engine] arReady event fired!');
-document.body.style.background = 'transparent';
-if (loaderStatus) loaderStatus.innerText = '✓ Camera & Tracker ready!';
-setTimeout(() => {
-if (loader) loader.classList.add('loaded');
-}, 300);
-});
-
-// Handle Camera / Target errors gracefully
-scene.addEventListener('arError', (event) => {
-console.error('[AR Engine] arError event:', event);
-if (loaderSpinner) loaderSpinner.style.display = 'none';
-if (loaderTitle) loaderTitle.innerText = 'Camera Access';
-if (loaderSub) loaderSub.innerText = 'If camera permission was allowed, please tap below to initialize the camera stream.';
-if (loaderStatus) {
-loaderStatus.innerText = 'Camera awaiting activation';
-loaderStatus.style.color = '#38bdf8';
-}
-if (errorAction) {
-errorAction.innerText = 'Start Camera Stream';
-errorAction.style.display = 'block';
-errorAction.onclick = () => {
-navigator.mediaDevices.getUserMedia({ audio: false, video: true })
-.then(() => location.reload())
-.catch(() => alert('Please allow camera permissions in your browser address bar settings.'));
-};
-}
-});
-
-let activeTargetCount = 0;
-
-// Bind Artwork 1 Events
-if (targetAnchor1) {
-targetAnchor1.addEventListener('targetFound', () => {
-console.log('[AR Engine] Artwork 1 detected!');
-activeTargetCount++;
-if (hud) hud.classList.add('hidden');
-if (video2) video2.pause();
-if (video3) video3.pause();
-video1.play().catch(e => console.warn('Video 1 play error:', e));
-});
-
-targetAnchor1.addEventListener('targetLost', () => {
-console.log('[AR Engine] Artwork 1 lost.');
-activeTargetCount = Math.max(0, activeTargetCount - 1);
-if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
-video1.pause();
-});
-}
-
-// Bind Artwork 2 Events
-if (targetAnchor2) {
-targetAnchor2.addEventListener('targetFound', () => {
-console.log('[AR Engine] Artwork 2 detected!');
-activeTargetCount++;
-if (hud) hud.classList.add('hidden');
-if (video1) video1.pause();
-if (video3) video3.pause();
-video2.play().catch(e => console.warn('Video 2 play error:', e));
-});
-
-targetAnchor2.addEventListener('targetLost', () => {
-console.log('[AR Engine] Artwork 2 lost.');
-activeTargetCount = Math.max(0, activeTargetCount - 1);
-if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
-video2.pause();
-});
-}
-
-// Bind Artwork 3 Events
-if (targetAnchor3) {
-targetAnchor3.addEventListener('targetFound', () => {
-console.log('[AR Engine] Artwork 3 detected!');
-activeTargetCount++;
-if (hud) hud.classList.add('hidden');
-if (video1) video1.pause();
-if (video2) video2.pause();
-video3.play().catch(e => console.warn('Video 3 play error:', e));
-});
-
-targetAnchor3.addEventListener('targetLost', () => {
-console.log('[AR Engine] Artwork 3 lost.');
-activeTargetCount = Math.max(0, activeTargetCount - 1);
-if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
-video3.pause();
-});
-}
-
-// Audio toggle
-let isGlobalMuted = true;
-function setMuteState(muted) {
-isGlobalMuted = muted;
-if (video1) video1.muted = muted;
-if (video2) video2.muted = muted;
-if (video3) video3.muted = muted;
-
-if (muted) {
-audioBadge.innerText = '🔈 Sound Muted (Tap for Sound)';
-audioBadge.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-} else {
-audioBadge.innerText = '🔊 Sound On';
-audioBadge.style.borderColor = '#38bdf8';
-}
-}
-
-function toggleAudio() {
-setMuteState(!isGlobalMuted);
-}
-
-audioBadge.addEventListener('click', (e) => {
-e.stopPropagation();
-toggleAudio();
-});
-
-// Tap screen to ensure audio playback is unmuted on first gesture
-window.addEventListener('click', (e) => {
-if (bottomControls && bottomControls.contains(e.target)) return;
-if (isGlobalMuted) {
-setMuteState(false);
-}
-}, { once: true });
-
-// --- BORDER FRAME CONTROLLER ---
-const BORDER_STYLES = [
-{ id: 'cyan', label: 'Neon Cyan', color: '#38bdf8', opacity: 0.95, visible: true },
-{ id: 'white', label: 'Minimal White', color: '#ffffff', opacity: 0.95, visible: true },
-{ id: 'gold', label: 'Gallery Gold', color: '#eab308', opacity: 0.95, visible: true },
-{ id: 'violet', label: 'Electric Purple', color: '#c084fc', opacity: 0.95, visible: true },
-{ id: 'emerald', label: 'Tech Emerald', color: '#34d399', opacity: 0.95, visible: true },
-{ id: 'none', label: 'Frameless (Off)', color: '#64748b', opacity: 0, visible: false },
- ];
-let currentBorderIndex = 0;
-
-function applyBorderStyle(idx) {
-currentBorderIndex = idx % BORDER_STYLES.length;
-const style = BORDER_STYLES[currentBorderIndex];
-
-[border1, border2, border3].forEach((b) => {
-if (!b) return;
-b.setAttribute('visible', style.visible ? 'true' : 'false');
-if (style.visible) {
-b.setAttribute('color', style.color);
-b.setAttribute('material', shader: flat; opacity: ${style.opacity}; transparent: true;`);
-}
-});
-
-if (borderBadge) {
-borderBadge.innerHTML = <span&gt;🖼️ Border: &lt;strong&gt;${style.label}</strong></span>`;
-borderBadge.style.color = style.visible ? style.color : '#94a3b8';
-borderBadge.style.borderColor = style.visible ? style.color : 'rgba(255,255,255,0.2)';
-}
-}
-
-if (borderBadge) {
-borderBadge.addEventListener('click', (e) => {
-e.stopPropagation();
-applyBorderStyle(currentBorderIndex + 1);
-});
-}
-
-// --- ADVANCED 1-EURO FILTER STABILIZER PROFILES ---
-const STABILITY_PROFILES = [
-{
-id: 'rock',
-name: 'Rock-Solid (Max Lock)',
-icon: '🔒',
-minCutOff: 0.00003,
-beta: 0.008,
-color: '#38bdf8',
-tip: 'Zero micro-tremor when holding still; maximum lock.'
-},
-{
-id: 'ultra',
-name: 'Ultra-Smooth (Default)',
-icon: '🛡️',
-minCutOff: 0.00008,
-beta: 0.03,
-color: '#2dd4bf',
-tip: 'Natural smooth tracking for hand-held museum exploration.'
-},
-{
-id: 'balanced',
-name: 'Balanced Dynamic',
-icon: '⚡',
-minCutOff: 0.0008,
-beta: 0.5,
-color: '#f59e0b',
-tip: 'Balanced responsiveness for faster movement.'
-},
-{
-id: 'fast',
-name: 'Fast Track',
-icon: '💨',
-minCutOff: 0.005,
-beta: 15.0,
-color: '#ec4899',
-tip: 'Immediate instantaneous motion response.'
-}
- ];
-
-let currentStabilityIndex = 1; // Default: Ultra-Smooth
-
-function applyStabilityProfile(index) {
-currentStabilityIndex = index % STABILITY_PROFILES.length;
-const profile = STABILITY_PROFILES[currentStabilityIndex];
-
-const arSystem = scene ? scene.systems['mindar-image-system'] : null;
-const controller = arSystem ? arSystem.controller : null;
-const trackingStates = (controller && controller.trackingStates) ? controller.trackingStates : [];
-
-trackingStates.forEach((state) => {
-if (!state || !state.filter) return;
-state.filter.minCutOff = profile.minCutOff;
-state.filter.beta = profile.beta;
-});
-
-if (stabilityBadge) {
-stabilityBadge.innerHTML = <span&gt;${profile.icon} Stabilizer: <strong>${profile.name}&lt;/strong&gt;&lt;/span>;
-stabilityBadge.style.color = profile.color;
-stabilityBadge.style.borderColor = profile.color;
-stabilityBadge.title = profile.tip;
-}
-console.log([AR Engine] Stabilizer updated to ${profile.name} (minCutOff: ${profile.minCutOff}, beta: ${profile.beta}));
-}
-
-if (stabilityBadge) {
-stabilityBadge.addEventListener('click', (e) => {
-e.stopPropagation();
-applyStabilityProfile(currentStabilityIndex + 1);
-});
-}
-</script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>AR Artwork Experience</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent !important;
+        user-select: none;
+        -webkit-user-select: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      /* Hide default A-Frame VR buttons and standard MindAR scanning screens */
+      .a-enter-vr { display: none !important; }
+      .a-enter-ar { display: none !important; }
+      .mindar-ui-overlay { display: none !important; }
+      .mindar-ui-loading { display: none !important; }
+      .mindar-ui-scanning { display: none !important; }
+
+      /* Force MindAR camera video feed to sit in background, full viewport cover */
+      video:not(#artwork-video) {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: cover !important;
+        z-index: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Force A-Frame canvas to be transparent over video */
+      a-scene canvas.a-canvas {
+        background: transparent !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 1 !important;
+      }
+
+      /* Visual Loading Overlay */
+      #ar-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+        color: #fff;
+        padding: 24px;
+        text-align: center;
+        transition: opacity 0.4s ease-out, visibility 0.4s;
+      }
+
+      #ar-loader.loaded {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .spinner-ring {
+        width: 64px;
+        height: 64px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #38bdf8;
+        border-right-color: #2dd4bf;
+        border-radius: 50%;
+        animation: spin 1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+        margin-bottom: 20px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loader-title {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        margin-bottom: 6px;
+      }
+
+      .loader-sub {
+        font-size: 13px;
+        color: #94a3b8;
+        margin-bottom: 20px;
+        max-width: 300px;
+        line-height: 1.5;
+      }
+
+      .loader-badge {
+        font-size: 11px;
+        font-family: monospace;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 999px;
+        padding: 6px 16px;
+        color: #38bdf8;
+      }
+
+      .action-btn {
+        display: none;
+        margin-top: 18px;
+        padding: 12px 24px;
+        background: linear-gradient(135deg, #38bdf8 0%, #2dd4bf 100%);
+        color: #04121d;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.35);
+      }
+
+      /* Active Scanning Reticle */
+      #scanning-hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        transition: opacity 0.3s;
+      }
+
+      #scanning-hud.hidden {
+        opacity: 0;
+      }
+
+      .hud-frame {
+        position: relative;
+        width: 270px;
+        height: 270px;
+        border: 2px dashed rgba(56, 189, 248, 0.5);
+        border-radius: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 30px rgba(56, 189, 248, 0.15);
+      }
+
+      .hud-text {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.9);
+        background: rgba(15, 23, 42, 0.75);
+        padding: 8px 16px;
+        border-radius: 999px;
+        margin-top: 18px;
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        letter-spacing: 0.3px;
+      }
+
+      /* Audio Status Badge */
+      #audio-badge {
+        position: fixed;
+        bottom: 24px;
+        right: 20px;
+        z-index: 1001;
+        background: rgba(15, 23, 42, 0.85);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        transition: all 0.2s ease;
+      }
+
+      /* Top Header Status */
+      #top-header {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1001;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        padding: 6px 14px;
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        color: #e2e8f0;
+        font-size: 12px;
+        pointer-events: none;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 8px #22c55e;
+      }
+
+      /* Mode Toggles for Stability & Border Frame */
+      #bottom-controls {
+        position: fixed;
+        bottom: 24px;
+        left: 20px;
+        z-index: 1001;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .control-pill {
+        background: rgba(15, 23, 42, 0.88);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 9px 16px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        backdrop-filter: blur(10px);
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #38bdf8;
+        transition: all 0.2s ease;
+      }
+
+      .control-pill:active {
+        transform: scale(0.96);
+      }
+    </style>
+
+    <!-- CAMERA INITIALIZER & POLYFILL FOR MINDAR -->
+    <script>
+      (function() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.warn("getUserMedia is not available on this browser or origin (requires HTTPS).");
+          return;
+        }
+
+        const nativeGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+
+        // Intercept getUserMedia so MindAR's exact facingMode doesn't fail on laptops/desktops
+        navigator.mediaDevices.getUserMedia = async function(constraints) {
+          console.log("[AR Engine] Requesting camera with constraints:", constraints);
+          try {
+            const idealConstraints = {
+              audio: false,
+              video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              }
+            };
+            const stream = await nativeGUM(idealConstraints);
+            console.log("[AR Engine] Camera opened successfully with ideal environment constraint.");
+            return stream;
+          } catch (err1) {
+            console.warn("[AR Engine] Ideal environment camera failed, falling back to any video device:", err1);
+            try {
+              const fallbackStream = await nativeGUM({ audio: false, video: true });
+              console.log("[AR Engine] Camera opened with generic fallback stream.");
+              return fallbackStream;
+            } catch (err2) {
+              console.error("[AR Engine] All camera attempts failed:", err2);
+              throw err2;
+            }
+          }
+        };
+
+        // Intercept video elements so MindAR's camera video plays reliably
+        const originalSrcObjectDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
+        if (originalSrcObjectDesc && originalSrcObjectDesc.set) {
+          Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+            set: function(stream) {
+              originalSrcObjectDesc.set.call(this, stream);
+              if (this.id !== 'artwork-video' && stream) {
+                this.setAttribute('autoplay', '');
+                this.setAttribute('muted', '');
+                this.setAttribute('playsinline', '');
+                this.setAttribute('webkit-playsinline', '');
+                this.muted = true;
+                this.playsInline = true;
+
+                this.style.position = 'fixed';
+                this.style.top = '0';
+                this.style.left = '0';
+                this.style.width = '100vw';
+                this.style.height = '100vh';
+                this.style.objectFit = 'cover';
+                this.style.zIndex = '0';
+
+                const attemptPlay = () => {
+                  this.play().then(() => {
+                    console.log("[AR Engine] Camera video play() succeeded.");
+                  }).catch(e => {
+                    console.warn("[AR Engine] Camera video play() pending gesture:", e);
+                  });
+                };
+
+                this.addEventListener('loadedmetadata', attemptPlay, { once: true });
+                attemptPlay();
+
+                const unlock = () => {
+                  if (this.paused) {
+                    this.play().catch(() => {});
+                  }
+                  window.removeEventListener('click', unlock);
+                  window.removeEventListener('touchstart', unlock);
+                };
+                window.addEventListener('click', unlock, { once: true });
+                window.addEventListener('touchstart', unlock, { once: true });
+              }
+            },
+            get: function() {
+              return originalSrcObjectDesc.get.call(this);
+            }
+          });
+        }
+      })();
+    </script>
+
+    <!-- A-Frame & MindAR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  </head>
+  <body>
+    <!-- Top Header Status -->
+    <div id="top-header">
+      <div class="status-dot"></div>
+      <span>AR Artwork Tracker</span>
+    </div>
+
+    <!-- Visual Loading Screen -->
+    <div id="ar-loader">
+      <div class="spinner-ring" id="loader-spinner"></div>
+      <div class="loader-title" id="loader-title">Starting Camera</div>
+      <div class="loader-sub" id="loader-sub">Initializing live camera feed & loading target artwork...</div>
+      <div class="loader-badge" id="loader-status">Starting camera...</div>
+      <button class="action-btn" id="error-action">Allow Camera & Start</button>
+    </div>
+
+    <!-- Active Scanning Reticle -->
+    <div id="scanning-hud">
+      <div class="hud-frame">
+        <div style="font-size: 32px; margin-bottom: 8px;">📷</div>
+        <div class="hud-text">Point camera at the artwork</div>
+      </div>
+    </div>
+
+    <!-- Bottom Left Controls (Stability & Border Frame) -->
+    <div id="bottom-controls">
+      <div id="stability-badge" class="control-pill" title="Click to cycle stability modes">
+        <span>🛡️ Stabilizer: <strong>Ultra-Smooth</strong></span>
+      </div>
+      <div id="border-badge" class="control-pill" title="Click to cycle overlay border frame styles">
+        <span>🖼️ Border: <strong>Neon Cyan</strong></span>
+      </div>
+    </div>
+
+    <!-- Sound Toggle -->
+    <div id="audio-badge">🔈 Sound Muted (Tap for Sound)</div>
+
+    <!-- A-Frame WebAR Scene with MindAR Tracking
+         Stabilization settings:
+         - filterMinCF: 0.00008 (removes high-frequency micro-tremor when holding still)
+         - filterBeta: 0.03 (suppresses erratic velocity spikes)
+         - missTolerance: 10 (keeps overlay locked across temporary blurs/motion)
+         - warmupTolerance: 2 (quick detection) -->
+    <a-scene
+      mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.00008; filterBeta: 0.03; warmupTolerance: 2; missTolerance: 10; autoStart: true;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights: true, alpha: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+      style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1;"
+    >
+      <a-assets>
+        <!-- Artwork 1 Video Overlay -->
+        <video
+          id="artwork-video"
+          src="./assets/my-video.mp4"
+          preload="auto"
+          loop
+          playsinline
+          webkit-playsinline
+          x5-playsinline
+          muted
+          crossorigin="anonymous"
+        ></video>
+
+        <!-- Artwork 2 Video Overlay (Change src to your 2nd video, e.g. ./assets/video2.mp4) -->
+        <video
+          id="artwork-video-2"
+          src="./assets/my-video3.mp4"
+          preload="auto"
+          loop
+          playsinline
+          webkit-playsinline
+          x5-playsinline
+          muted
+          crossorigin="anonymous"
+        ></video>
+
+        <!-- Artwork 3 Video Overlay (Change src to your 3rd video, e.g. ./assets/video3.mp4) -->
+        <video
+          id="artwork-video-3"
+          src="./assets/my-video3.mp4"
+          preload="auto"
+          loop
+          playsinline
+          webkit-playsinline
+          x5-playsinline
+          muted
+          crossorigin="anonymous"
+        ></video>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- Target Anchor 1: First Physical Artwork (targetIndex: 0) -->
+      <a-entity id="target-anchor" mindar-image-target="targetIndex: 0">
+        <!-- Glowing Frame Border Plane Behind Video Plane -->
+        <a-plane
+          id="ar-video-border-1"
+          position="0 0 -0.005"
+          width="1.838"
+          height="1.06"
+          color="#38bdf8"
+          material="shader: flat; opacity: 0.95; transparent: true;"
+        ></a-plane>
+        <a-video
+          id="ar-video-plane"
+          src="#artwork-video"
+          position="0 0 0"
+          height="1"
+          width="1.778"
+          rotation="0 0 0"
+        ></a-video>
+      </a-entity>
+
+      <!-- Target Anchor 2: Second Physical Artwork (targetIndex: 1) -->
+      <a-entity id="target-anchor-2" mindar-image-target="targetIndex: 1">
+        <!-- Glowing Frame Border Plane Behind Video Plane -->
+        <a-plane
+          id="ar-video-border-2"
+          position="0 0 -0.005"
+          width="1.838"
+          height="1.06"
+          color="#38bdf8"
+          material="shader: flat; opacity: 0.95; transparent: true;"
+        ></a-plane>
+        <a-video
+          id="ar-video-plane-2"
+          src="#artwork-video-2"
+          position="0 0 0"
+          height="1"
+          width="1.778"
+          rotation="0 0 0"
+        ></a-video>
+      </a-entity>
+
+      <!-- Target Anchor 3: Third Physical Artwork (targetIndex: 2) -->
+      <a-entity id="target-anchor-3" mindar-image-target="targetIndex: 2">
+        <!-- Glowing Frame Border Plane Behind Video Plane -->
+        <a-plane
+          id="ar-video-border-3"
+          position="0 0 -0.005"
+          width="1.838"
+          height="1.06"
+          color="#38bdf8"
+          material="shader: flat; opacity: 0.95; transparent: true;"
+        ></a-plane>
+        <a-video
+          id="ar-video-plane-3"
+          src="#artwork-video-3"
+          position="0 0 0"
+          height="1"
+          width="1.778"
+          rotation="0 0 0"
+        ></a-video>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      const video1 = document.getElementById('artwork-video');
+      const targetAnchor1 = document.getElementById('target-anchor');
+      const videoPlane1 = document.getElementById('ar-video-plane');
+      const border1 = document.getElementById('ar-video-border-1');
+
+      const video2 = document.getElementById('artwork-video-2');
+      const targetAnchor2 = document.getElementById('target-anchor-2');
+      const videoPlane2 = document.getElementById('ar-video-plane-2');
+      const border2 = document.getElementById('ar-video-border-2');
+
+      const video3 = document.getElementById('artwork-video-3');
+      const targetAnchor3 = document.getElementById('target-anchor-3');
+      const videoPlane3 = document.getElementById('ar-video-plane-3');
+      const border3 = document.getElementById('ar-video-border-3');
+
+      const loader = document.getElementById('ar-loader');
+      const loaderStatus = document.getElementById('loader-status');
+      const loaderTitle = document.getElementById('loader-title');
+      const loaderSub = document.getElementById('loader-sub');
+      const loaderSpinner = document.getElementById('loader-spinner');
+      const errorAction = document.getElementById('error-action');
+      const hud = document.getElementById('scanning-hud');
+      const audioBadge = document.getElementById('audio-badge');
+      const stabilityBadge = document.getElementById('stability-badge');
+      const borderBadge = document.getElementById('border-badge');
+      const bottomControls = document.getElementById('bottom-controls');
+      const scene = document.querySelector('a-scene');
+
+      // Helper to auto-fit video planes and border frames to aspect ratio
+      function setupVideoAutoFit(videoEl, planeEl, borderEl) {
+        if (!videoEl || !planeEl) return;
+        videoEl.addEventListener('loadedmetadata', () => {
+          if (videoEl.videoWidth && videoEl.videoHeight) {
+            const aspect = videoEl.videoWidth / videoEl.videoHeight;
+            planeEl.setAttribute('width', aspect.toFixed(3));
+            planeEl.setAttribute('height', '1');
+            if (borderEl) {
+              const borderPad = 0.06; // Elegant border frame margin
+              borderEl.setAttribute('width', (aspect + borderPad).toFixed(3));
+              borderEl.setAttribute('height', (1 + borderPad).toFixed(3));
+            }
+            console.log('[AR Engine] Video & border aspect ratio set:', aspect.toFixed(3));
+          }
+        });
+
+        videoEl.addEventListener('playing', () => {
+          if (planeEl.components && planeEl.components.material) {
+            const mat = planeEl.components.material.material;
+            if (mat && mat.map) {
+              mat.map.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+      setupVideoAutoFit(video1, videoPlane1, border1);
+      setupVideoAutoFit(video2, videoPlane2, border2);
+      setupVideoAutoFit(video3, videoPlane3, border3);
+
+      // Check HTTPS requirement
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        if (loaderSpinner) loaderSpinner.style.display = 'none';
+        if (loaderTitle) loaderTitle.innerText = 'HTTPS Connection Required';
+        if (loaderSub) loaderSub.innerText = 'Mobile browsers require a secure HTTPS connection for camera access. Please use your GitHub Pages https:// URL.';
+        if (loaderStatus) {
+          loaderStatus.innerText = 'Insecure HTTP origin';
+          loaderStatus.style.color = '#f87171';
+        }
+      }
+
+      // Handle AR readiness
+      scene.addEventListener('arReady', () => {
+        console.log('[AR Engine] arReady event fired!');
+        document.body.style.background = 'transparent';
+        if (loaderStatus) loaderStatus.innerText = '✓ Camera & Tracker ready!';
+        setTimeout(() => {
+          if (loader) loader.classList.add('loaded');
+        }, 300);
+      });
+
+      // Handle Camera / Target errors gracefully
+      scene.addEventListener('arError', (event) => {
+        console.error('[AR Engine] arError event:', event);
+        if (loaderSpinner) loaderSpinner.style.display = 'none';
+        if (loaderTitle) loaderTitle.innerText = 'Camera Access';
+        if (loaderSub) loaderSub.innerText = 'If camera permission was allowed, please tap below to initialize the camera stream.';
+        if (loaderStatus) {
+          loaderStatus.innerText = 'Camera awaiting activation';
+          loaderStatus.style.color = '#38bdf8';
+        }
+        if (errorAction) {
+          errorAction.innerText = 'Start Camera Stream';
+          errorAction.style.display = 'block';
+          errorAction.onclick = () => {
+            navigator.mediaDevices.getUserMedia({ audio: false, video: true })
+              .then(() => location.reload())
+              .catch(() => alert('Please allow camera permissions in your browser address bar settings.'));
+          };
+        }
+      });
+
+      let activeTargetCount = 0;
+
+      // Bind Artwork 1 Events
+      if (targetAnchor1) {
+        targetAnchor1.addEventListener('targetFound', () => {
+          console.log('[AR Engine] Artwork 1 detected!');
+          activeTargetCount++;
+          if (hud) hud.classList.add('hidden');
+          if (video2) video2.pause();
+          if (video3) video3.pause();
+          video1.play().catch(e => console.warn('Video 1 play error:', e));
+        });
+
+        targetAnchor1.addEventListener('targetLost', () => {
+          console.log('[AR Engine] Artwork 1 lost.');
+          activeTargetCount = Math.max(0, activeTargetCount - 1);
+          if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
+          video1.pause();
+        });
+      }
+
+      // Bind Artwork 2 Events
+      if (targetAnchor2) {
+        targetAnchor2.addEventListener('targetFound', () => {
+          console.log('[AR Engine] Artwork 2 detected!');
+          activeTargetCount++;
+          if (hud) hud.classList.add('hidden');
+          if (video1) video1.pause();
+          if (video3) video3.pause();
+          video2.play().catch(e => console.warn('Video 2 play error:', e));
+        });
+
+        targetAnchor2.addEventListener('targetLost', () => {
+          console.log('[AR Engine] Artwork 2 lost.');
+          activeTargetCount = Math.max(0, activeTargetCount - 1);
+          if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
+          video2.pause();
+        });
+      }
+
+      // Bind Artwork 3 Events
+      if (targetAnchor3) {
+        targetAnchor3.addEventListener('targetFound', () => {
+          console.log('[AR Engine] Artwork 3 detected!');
+          activeTargetCount++;
+          if (hud) hud.classList.add('hidden');
+          if (video1) video1.pause();
+          if (video2) video2.pause();
+          video3.play().catch(e => console.warn('Video 3 play error:', e));
+        });
+
+        targetAnchor3.addEventListener('targetLost', () => {
+          console.log('[AR Engine] Artwork 3 lost.');
+          activeTargetCount = Math.max(0, activeTargetCount - 1);
+          if (activeTargetCount === 0 && hud) hud.classList.remove('hidden');
+          video3.pause();
+        });
+      }
+
+      // Audio toggle
+      let isGlobalMuted = true;
+      function setMuteState(muted) {
+        isGlobalMuted = muted;
+        if (video1) video1.muted = muted;
+        if (video2) video2.muted = muted;
+        if (video3) video3.muted = muted;
+
+        if (muted) {
+          audioBadge.innerText = '🔈 Sound Muted (Tap for Sound)';
+          audioBadge.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        } else {
+          audioBadge.innerText = '🔊 Sound On';
+          audioBadge.style.borderColor = '#38bdf8';
+        }
+      }
+
+      function toggleAudio() {
+        setMuteState(!isGlobalMuted);
+      }
+
+      audioBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAudio();
+      });
+
+      // Tap screen to ensure audio playback is unmuted on first gesture
+      window.addEventListener('click', (e) => {
+        if (bottomControls && bottomControls.contains(e.target)) return;
+        if (isGlobalMuted) {
+          setMuteState(false);
+        }
+      }, { once: true });
+
+      // --- BORDER FRAME CONTROLLER ---
+      const BORDER_STYLES = [
+        { id: 'cyan', label: 'Neon Cyan', color: '#38bdf8', opacity: 0.95, visible: true },
+        { id: 'white', label: 'Minimal White', color: '#ffffff', opacity: 0.95, visible: true },
+        { id: 'gold', label: 'Gallery Gold', color: '#eab308', opacity: 0.95, visible: true },
+        { id: 'violet', label: 'Electric Purple', color: '#c084fc', opacity: 0.95, visible: true },
+        { id: 'emerald', label: 'Tech Emerald', color: '#34d399', opacity: 0.95, visible: true },
+        { id: 'none', label: 'Frameless (Off)', color: '#64748b', opacity: 0, visible: false },
+      ];
+      let currentBorderIndex = 0;
+
+      function applyBorderStyle(idx) {
+        currentBorderIndex = idx % BORDER_STYLES.length;
+        const style = BORDER_STYLES[currentBorderIndex];
+
+        [border1, border2, border3].forEach((b) => {
+          if (!b) return;
+          b.setAttribute('visible', style.visible ? 'true' : 'false');
+          if (style.visible) {
+            b.setAttribute('color', style.color);
+            b.setAttribute('material', `shader: flat; opacity: ${style.opacity}; transparent: true;`);
+          }
+        });
+
+        if (borderBadge) {
+          borderBadge.innerHTML = `<span>🖼️ Border: <strong>${style.label}</strong></span>`;
+          borderBadge.style.color = style.visible ? style.color : '#94a3b8';
+          borderBadge.style.borderColor = style.visible ? style.color : 'rgba(255,255,255,0.2)';
+        }
+      }
+
+      if (borderBadge) {
+        borderBadge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          applyBorderStyle(currentBorderIndex + 1);
+        });
+      }
+
+      // --- ADVANCED 1-EURO FILTER STABILIZER PROFILES ---
+      const STABILITY_PROFILES = [
+        {
+          id: 'rock',
+          name: 'Rock-Solid (Max Lock)',
+          icon: '🔒',
+          minCutOff: 0.00003,
+          beta: 0.008,
+          color: '#38bdf8',
+          tip: 'Zero micro-tremor when holding still; maximum lock.'
+        },
+        {
+          id: 'ultra',
+          name: 'Ultra-Smooth (Default)',
+          icon: '🛡️',
+          minCutOff: 0.00008,
+          beta: 0.03,
+          color: '#2dd4bf',
+          tip: 'Natural smooth tracking for hand-held museum exploration.'
+        },
+        {
+          id: 'balanced',
+          name: 'Balanced Dynamic',
+          icon: '⚡',
+          minCutOff: 0.0008,
+          beta: 0.5,
+          color: '#f59e0b',
+          tip: 'Balanced responsiveness for faster movement.'
+        },
+        {
+          id: 'fast',
+          name: 'Fast Track',
+          icon: '💨',
+          minCutOff: 0.005,
+          beta: 15.0,
+          color: '#ec4899',
+          tip: 'Immediate instantaneous motion response.'
+        }
+      ];
+
+      let currentStabilityIndex = 1; // Default: Ultra-Smooth
+
+      function applyStabilityProfile(index) {
+        currentStabilityIndex = index % STABILITY_PROFILES.length;
+        const profile = STABILITY_PROFILES[currentStabilityIndex];
+
+        const arSystem = scene ? scene.systems['mindar-image-system'] : null;
+        const controller = arSystem ? arSystem.controller : null;
+        const trackingStates = (controller && controller.trackingStates) ? controller.trackingStates : [];
+
+        trackingStates.forEach((state) => {
+          if (!state || !state.filter) return;
+          state.filter.minCutOff = profile.minCutOff;
+          state.filter.beta = profile.beta;
+        });
+
+        if (stabilityBadge) {
+          stabilityBadge.innerHTML = `<span>${profile.icon} Stabilizer: <strong>${profile.name}</strong></span>`;
+          stabilityBadge.style.color = profile.color;
+          stabilityBadge.style.borderColor = profile.color;
+          stabilityBadge.title = profile.tip;
+        }
+        console.log(`[AR Engine] Stabilizer updated to ${profile.name} (minCutOff: ${profile.minCutOff}, beta: ${profile.beta})`);
+      }
+
+      if (stabilityBadge) {
+        stabilityBadge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          applyStabilityProfile(currentStabilityIndex + 1);
+        });
+      }
+    </script>
+  </body>
 </html>
