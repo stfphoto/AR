@@ -317,9 +317,9 @@
     <!-- Sound Toggle Button -->
     <div id="audio-badge">🔈 Sound Muted (Tap for Sound)</div>
 
-    <!-- A-Frame WebAR Scene with MindAR Tracking (Strict multi-target discrimination & ultra-smooth stabilization) -->
+    <!-- A-Frame WebAR Scene with MindAR Tracking (Locked to Ultra-Smooth Stabilization) -->
     <a-scene
-      mindar-image="imageTargetSrc: ./assets/targets.mind; maxTrack: 2; filterMinCF: 0.0001; filterBeta: 0.01; warmupTolerance: 5; missTolerance: 3; autoStart: true;"
+      mindar-image="imageTargetSrc: ./assets/targets.mind; filterMinCF: 0.00008; filterBeta: 0.03; warmupTolerance: 2; missTolerance: 10; autoStart: true;"
       color-space="sRGB"
       renderer="colorManagement: true, physicallyCorrectLights: true, alpha: true"
       vr-mode-ui="enabled: false"
@@ -587,14 +587,13 @@
         currentActiveTarget = targetIndex;
         if (hud) hud.classList.add('hidden');
 
-        // Strictly pause every other video and rewind them; only play the dedicated video for this target index
+        // Strictly pause every other video; only play the dedicated video for this target index
         targetVideos.forEach((vid, idx) => {
           if (!vid) return;
           if (idx === targetIndex) {
             vid.play().catch(e => console.warn(`Video ${idx + 1} play pending gesture:`, e));
           } else {
             vid.pause();
-            vid.currentTime = 0;
           }
         });
       }
@@ -602,10 +601,9 @@
       function handleTargetLost(targetIndex) {
         console.log(`[AR Engine] Artwork ${targetIndex + 1} lost. Target Index: ${targetIndex}`);
         
-        // Immediately pause and rewind this artwork's video to prevent ghost frames
+        // Immediately pause this artwork's video
         if (targetVideos[targetIndex]) {
           targetVideos[targetIndex].pause();
-          targetVideos[targetIndex].currentTime = 0;
         }
 
         if (currentActiveTarget === targetIndex) {
@@ -614,23 +612,40 @@
         }
       }
 
-      // Bind Artwork 1 Events (targetIndex: 0 -> video 1: my-video.mp4)
+      // Bind Artwork 1 Events (targetIndex: 0 -> video 1)
       if (targetAnchor1) {
         targetAnchor1.addEventListener('targetFound', () => handleTargetFound(0));
         targetAnchor1.addEventListener('targetLost', () => handleTargetLost(0));
       }
 
-      // Bind Artwork 2 Events (targetIndex: 1 -> video 2: my-video2.mp4)
+      // Bind Artwork 2 Events (targetIndex: 1 -> video 2)
       if (targetAnchor2) {
         targetAnchor2.addEventListener('targetFound', () => handleTargetFound(1));
         targetAnchor2.addEventListener('targetLost', () => handleTargetLost(1));
       }
 
-      // Bind Artwork 3 Events (targetIndex: 2 -> video 3: my-video3.mp4)
+      // Bind Artwork 3 Events (targetIndex: 2 -> video 3)
       if (targetAnchor3) {
         targetAnchor3.addEventListener('targetFound', () => handleTargetFound(2));
         targetAnchor3.addEventListener('targetLost', () => handleTargetLost(2));
       }
+
+      // Smart check for dedicated video files (e.g. video2.mp4, video3.mp4)
+      async function resolveDedicatedVideo(videoEl, preferredSrc, fallbackSrc) {
+        if (!videoEl) return;
+        try {
+          const res = await fetch(preferredSrc, { method: 'HEAD' });
+          if (res.ok) {
+            videoEl.src = preferredSrc;
+            console.log(`[AR Engine] Dedicated video active for ${videoEl.id}: ${preferredSrc}`);
+            return;
+          }
+        } catch (e) {}
+        videoEl.src = fallbackSrc;
+      }
+
+      resolveDedicatedVideo(video2, './assets/my-video2.mp4', './assets/my-video.mp4');
+      resolveDedicatedVideo(video3, './assets/my-video3.mp4', './assets/my-video.mp4');
 
       // Audio Toggle Controller
       let isGlobalMuted = true;
